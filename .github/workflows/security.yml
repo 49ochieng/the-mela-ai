@@ -1,0 +1,61 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    # Weekly Monday 06:00 UTC scan to catch new advisories
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+        with:
+          # Scan the entire history on push/cron, only the diff on PRs.
+          args: detect --no-banner --redact --verbose
+
+  bandit:
+    name: Python SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install bandit
+      - name: Run bandit
+        # Skip B101 (assert usage in tests) and B404/B603 (subprocess) which
+        # are intentional in scripted utilities. All HIGH severity findings
+        # still fail the job.
+        run: |
+          bandit -r backend/app \
+            --severity-level high --confidence-level medium \
+            -x backend/tests
+
+  pip-audit:
+    name: Python deps audit (pip-audit)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # advisory; fix in follow-up PRs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt --strict --ignore-vuln GHSA-xxxx || true

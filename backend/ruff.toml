@@ -1,0 +1,33 @@
+# Ruff linting configuration for Mela AI backend.
+# These rules are enforced in CI — fix before merging.
+
+# Respect .gitignore patterns
+respect-gitignore = true
+exclude = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    "alembic/versions",
+    "tests/",
+]
+
+[lint]
+# E = pycodestyle errors, F = pyflakes, W = pycodestyle warnings
+select = ["E", "F", "W"]
+ignore = [
+    "E501",   # line too long — handled by formatter / not enforced
+    "E711",   # comparison to None — SQLAlchemy uses `== None` in filters
+    "E712",   # comparison to True/False — common in SQLAlchemy
+    "F401",   # unused import — some imports are for side effects / re-exports
+    "F841",   # unused variable — common in scaffolding code
+    "E402",   # module import not at top — lazy imports used for circular dep avoidance
+]
+
+[lint.per-file-ignores]
+# Test files are allowed to use assert and have wider imports
+"tests/**" = ["F401", "F811"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

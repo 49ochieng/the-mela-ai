@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# Mela AI — Azure Developer CLI configuration
+# Target: subscription armely-isv | resource group rg-ai | region eastus2
+#
+# Parameter flow:
+#   scripts/preflight.ps1 (or .sh) runs first, writes USE_EXISTING_* env vars
+#   → azd env set useExisting* (done inside azd-up.ps1 / azd-up.sh)
+#   → infra.parameters below map those azd env vars to Bicep parameter names
+#   → infra/main.bicep receives them as bool parameters
+
+name: mela-ai
+
+metadata:
+  template: mela-ai@1.0.0
+
+# ── Services ──────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    project: ./backend
+    language: python
+    host: appservice
+
+  frontend:
+    project: ./frontend
+    language: js
+    host: appservice
+    dist: .next/standalone
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+
+infra:
+  provider: bicep
+  path: ./infra
+  module: main
+
+  # Map azd environment variables → Bicep parameter names.
+  # Set these via: azd env set <name> <value>
+  # The preflight script + azd-up scripts do this automatically.
+  parameters:
+    useExistingAppServicePlan: ${useExistingAppServicePlan}
+    useExistingBackendApp:     ${useExistingBackendApp}
+    useExistingFrontendApp:    ${useExistingFrontendApp}
+    useExistingKeyVault:       ${useExistingKeyVault}
+    useExistingAppInsights:    ${useExistingAppInsights}
+    useExistingStorage:        ${useExistingStorage}
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
+
+pipeline:
+  provider: github
+
+# ── Hooks ─────────────────────────────────────────────────────────────────────
+# preprovision: detects existing resources, sets useExisting* in azd env.
+# predeploy:    re-runs preflight so flags are always current.
+
+hooks:
+  preprovision:
+    posix:
+      shell: sh
+      run: scripts/preflight.sh
+      interactive: true
+      continueOnError: false
+    windows:
+      shell: pwsh
+      run: scripts/preflight.ps1
+      interactive: true
+      continueOnError: false
+
+  predeploy:
+    posix:
+      shell: sh
+      run: scripts/preflight.sh
+      interactive: false
+      continueOnError: false
+    windows:
+      shell: pwsh
+      run: scripts/preflight.ps1
+      interactive: false
+      continueOnError: false

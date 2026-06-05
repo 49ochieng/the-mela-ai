@@ -1,0 +1,113 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "dev"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "appServicePlanName": {
+      "value": "asp-armely-ai"
+    },
+    "backendAppName": {
+      "value": "armely-ai-api-rgai-20260519"
+    },
+    "frontendAppName": {
+      "value": "armely-ai-web-rgai-20260519"
+    },
+    "keyVaultName": {
+      "value": "kv-armely-ai"
+    },
+    "appInsightsName": {
+      "value": "ai-armely-ai"
+    },
+    "logAnalyticsName": {
+      "value": "log-armely-ai"
+    },
+    "storageAccountName": {
+      "value": "starmelyai"
+    },
+    "appServicePlanSku": {
+      "value": "B1"
+    },
+    "provisionStorage": {
+      "value": false
+    },
+    "useExistingAppServicePlan": {
+      "value": false
+    },
+    "useExistingBackendApp": {
+      "value": false
+    },
+    "useExistingFrontendApp": {
+      "value": false
+    },
+    "useExistingKeyVault": {
+      "value": true
+    },
+    "useExistingAppInsights": {
+      "value": true
+    },
+    "useExistingStorage": {
+      "value": false
+    },
+    "enableProactiveAlerts": {
+      "value": true
+    },
+    "enableDiagnosticSettings": {
+      "value": true
+    },
+    "alertActionGroupName": {
+      "value": "ag-mela-ops"
+    },
+    "alertActionGroupShortName": {
+      "value": "melaops"
+    },
+    "alertEmailRecipients": {
+      "value": [
+        "edgar.mcochieng@armely.com"
+      ]
+    },
+    "backendHttp5xxThreshold": {
+      "value": 5
+    },
+    "backendResponseTimeThresholdSeconds": {
+      "value": 2
+    },
+    "appExceptionsThreshold": {
+      "value": 3
+    },
+    "backgroundErrorThreshold": {
+      "value": 1
+    },
+    "enableSyntheticAvailability": {
+      "value": true
+    },
+    "syntheticTestName": {
+      "value": "mela-backend-health"
+    },
+    "syntheticTestUrl": {
+      "value": ""
+    },
+    "syntheticTestFrequencySeconds": {
+      "value": 300
+    },
+    "syntheticTestTimeoutSeconds": {
+      "value": 30
+    },
+    "syntheticFailedLocationThreshold": {
+      "value": 1
+    },
+    "syntheticTestLocations": {
+      "value": [
+        "us-ca-sjc-azr",
+        "emea-nl-ams-azr"
+      ]
+    },
+    "deployPrincipalObjectId": {
+      "value": ""
+    }
+  }
+}

@@ -1,0 +1,22 @@
+# gitleaks configuration for Mela AI
+# https://github.com/gitleaks/gitleaks
+title = "Mela AI gitleaks rules"
+
+[extend]
+# Inherit the default rule set, then layer our own additions/exclusions.
+useDefault = true
+
+[allowlist]
+description = "Mela AI allowlist (test fixtures, sample env files, doc placeholders)"
+paths = [
+  '''(?i)env/.*\.env\.(sample|template|example)$''',
+  '''(?i)docs/.*\.(md|MD)$''',
+  '''(?i)backend/tests/.*''',
+  '''(?i)tests/.*''',
+  '''(?i).*\.lock$''',
+]
+regexes = [
+  # Common doc placeholders
+  '''(?i)<your[_-].*?>''',
+  '''(?i)CHANGEME|REPLACE_ME|YOUR_SECRET_HERE''',
+]

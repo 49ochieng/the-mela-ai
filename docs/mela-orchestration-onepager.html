@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mela AI Architecture </title>
+<style>
+  /* ============================================================
+     EDIT ME: brand and layout tokens
+     ============================================================ */
+  :root {
+    --brand:      #2f5597;
+    --brand-2:    #1d3a6b;
+    --accent:     #ff8a3d;
+    --ink:        #0f172a;
+    --ink-soft:   #475569;
+    --line:       #e2e8f0;
+    --bg:         #f8fafc;
+    --card:       #ffffff;
+    --shadow:     0 1px 2px rgba(15,23,42,.06), 0 6px 18px rgba(15,23,42,.06);
+    --max-w:      1320px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink); background:var(--bg);
+  }
+  code{font:12.5px/1.4 "JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+       background:#eef2f7;padding:1px 6px;border-radius:5px}
+  .wrap{max-width:var(--max-w);margin:0 auto;padding:0 28px}
+
+  header{background:linear-gradient(135deg,var(--brand) 0%,var(--brand-2) 100%);
+         color:#fff;padding:22px 0}
+  .h-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand-mark{height:42px;width:auto;display:block}
+  .brand-mark g{fill:#ffffff !important}
+  h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;opacity:.92}
+  .sub{margin:2px 0 0;opacity:.75;font-size:12.5px}
+  .meta{font-size:12px;opacity:.85;text-align:right}
+
+  main{padding:22px 0 50px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        box-shadow:var(--shadow);padding:18px 20px;margin-bottom:18px}
+  .card h2{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--brand-2);
+           text-transform:uppercase;letter-spacing:.7px}
+  .card p{margin:0;color:var(--ink-soft);font-size:13.5px}
+
+  .diagram{padding:14px 14px 6px}
+  .diagram svg{display:block;width:100%;height:auto}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;padding:0 6px 4px;
+          font-size:12px;color:var(--ink-soft)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:14px;height:8px;border-radius:3px;display:inline-block}
+
+  footer{text-align:center;color:var(--ink-soft);font-size:12px;padding:14px}
+</style>
+</head>
+<body>
+
+<!-- <header>
+  <div class="wrap h-row">
+    <div class="brand">
+       Mela wordmark (inlined from frontend/public/mela-logo.svg).
+           Fill is forced to white via .brand-mark g {} in the stylesheet. -->
+      <!-- <svg class="brand-mark" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 375 374.999991" preserveAspectRatio="xMidYMid meet" aria-label="Mela AI"><defs><g/><clipPath id="logoClip"><rect x="0" width="344" y="0" height="103"/></clipPath></defs><g transform="matrix(1, 0, 0, 1, 16, 135)"><g clip-path="url(#logoClip)"><g fill="#2f5597" fill-opacity="1"><g transform="translate(1.415774, 83.314685)"><g><path d="M 53.402344 -0.726562 L 44.410156 -0.726562 L 44.410156 -33.058594 C 44.410156 -37.78125 42.898438 -41.777344 39.871094 -45.046875 C 36.84375 -48.316406 32.96875 -49.953125 28.246094 -49.953125 C 23.523438 -49.953125 19.648438 -48.332031 16.621094 -45.09375 C 13.59375 -41.855469 12.078125 -37.84375 12.078125 -33.058594 L 12.078125 -0.726562 L 2.726562 -0.726562 L 2.726562 -57.582031 L 12.078125 -57.582031 L 12.078125 -51.679688 C 15.105469 -54.039062 17.742188 -55.675781 19.980469 -56.582031 C 22.707031 -57.792969 25.734375 -58.398438 29.0625 -58.398438 C 33.300781 -58.398438 37.207031 -57.382812 40.777344 -55.355469 C 44.351562 -53.328125 47.226562 -50.617188 49.40625 -47.226562 C 51.890625 -50.558594 55.054688 -53.253906 58.898438 -55.3125 C 62.742188 -57.371094 66.664062 -58.398438 70.660156 -58.398438 C 77.5 -58.398438 83.285156 -55.960938 88.007812 -51.085938 C 92.730469 -46.214844 95.089844 -40.355469 95.089844 -33.511719 L 95.089844 -0.726562 L 86.007812 -0.726562 L 86.007812 -33.058594 C 86.007812 -37.78125 84.496094 -41.777344 81.46875 -45.046875 C 78.441406 -48.316406 74.59375 -49.953125 69.933594 -49.953125 C 65.210938 -49.953125 61.273438 -48.347656 58.125 -45.140625 C 54.976562 -41.929688 53.402344 -37.992188 53.402344 -33.332031 Z M 53.402344 -0.726562 "/></g></g></g><g fill="#2f5597" fill-opacity="1"><g transform="translate(99.685483, 83.314685)"><g><path d="M 53.222656 -33.511719 C 51.527344 -44.472656 44.683594 -49.953125 32.695312 -49.953125 C 26.703125 -49.953125 21.539062 -47.925781 17.210938 -43.867188 C 12.882812 -39.808594 10.746094 -34.875 10.808594 -29.0625 C 10.867188 -23.371094 12.910156 -18.527344 16.9375 -14.53125 C 20.964844 -10.535156 25.824219 -8.539062 31.515625 -8.539062 C 36.359375 -8.539062 40.960938 -9.445312 45.320312 -11.261719 C 50.40625 -13.441406 53.644531 -16.378906 55.039062 -20.070312 L 61.125 -14.167969 C 58.640625 -9.507812 54.675781 -5.933594 49.226562 -3.453125 C 44.261719 -1.089844 38.75 0.0898438 32.695312 0.0898438 C 24.21875 0.0898438 16.96875 -2.710938 10.945312 -8.308594 C 4.917969 -13.910156 1.90625 -20.828125 1.90625 -29.0625 C 1.90625 -37.238281 4.933594 -44.167969 10.988281 -49.863281 C 17.042969 -55.554688 24.28125 -58.398438 32.695312 -58.398438 C 41.777344 -58.339844 48.894531 -56.28125 54.039062 -52.222656 C 60.15625 -47.441406 63.210938 -40.023438 63.210938 -29.972656 C 63.210938 -28.761719 63.183594 -27.488281 63.121094 -26.15625 L 19.527344 -26.15625 L 19.527344 -33.421875 L 53.132812 -33.421875 Z M 53.222656 -33.511719 "/></g></g></g><g fill="#2f5597" fill-opacity="1"><g transform="translate(165.168341, 83.314685)"><g><path d="M 2.726562 -72.566406 L 12.078125 -72.566406 L 12.078125 -0.726562 L 2.726562 -0.726562 Z M 2.726562 -72.566406 "/></g></g></g><g fill="#2f5597" fill-opacity="1"><g transform="translate(180.789782, 83.314685)"><g><path d="M 45.683594 -0.726562 L 45.683594 -49.40625 L 33.058594 -49.40625 C 27.246094 -49.40625 22.3125 -47.46875 18.253906 -43.59375 C 14.199219 -39.71875 12.171875 -34.90625 12.171875 -29.152344 C 12.171875 -23.402344 14.167969 -18.601562 18.164062 -14.757812 C 22.160156 -10.914062 27.035156 -8.992188 32.785156 -8.992188 C 36.238281 -8.992188 39.417969 -9.808594 42.324219 -11.445312 L 42.324219 -2.269531 C 38.507812 -1 35.179688 -0.363281 32.332031 -0.363281 C 24.160156 -0.363281 17.179688 -3.132812 11.398438 -8.671875 C 5.617188 -14.214844 2.726562 -21.039062 2.726562 -29.152344 C 2.726562 -33.753906 3.785156 -38.144531 5.902344 -42.324219 C 8.445312 -47.167969 12.019531 -50.921875 16.621094 -53.585938 C 21.222656 -56.25 26.308594 -57.582031 31.878906 -57.582031 L 54.492188 -57.582031 L 54.492188 -0.726562 Z M 45.683594 -0.726562 "/></g></g></g><g fill="#2f5597" fill-opacity="1"><g transform="translate(239.188507, 83.314685)"><g/></g><g transform="translate(267.525063, 83.314685)"><g><path d="M 45.683594 -0.726562 L 45.683594 -49.40625 L 33.058594 -49.40625 C 27.246094 -49.40625 22.3125 -47.46875 18.253906 -43.59375 C 14.199219 -39.71875 12.171875 -34.90625 12.171875 -29.152344 C 12.171875 -23.402344 14.167969 -18.601562 18.164062 -14.757812 C 22.160156 -10.914062 27.035156 -8.992188 32.785156 -8.992188 C 36.238281 -8.992188 39.417969 -9.808594 42.324219 -11.445312 L 42.324219 -2.269531 C 38.507812 -1 35.179688 -0.363281 32.332031 -0.363281 C 24.160156 -0.363281 17.179688 -3.132812 11.398438 -8.671875 C 5.617188 -14.214844 2.726562 -21.039062 2.726562 -29.152344 C 2.726562 -33.753906 3.785156 -38.144531 5.902344 -42.324219 C 8.445312 -47.167969 12.019531 -50.921875 16.621094 -53.585938 C 21.222656 -56.25 26.308594 -57.582031 31.878906 -57.582031 L 54.492188 -57.582031 L 54.492188 -0.726562 Z M 45.683594 -0.726562 "/></g></g></g><g fill="#2f5597" fill-opacity="1"><g transform="translate(325.923788, 83.314685)"><g><path d="M 12.078125 -0.726562 L 2.726562 -0.726562 L 2.726562 -58.398438 L 12.078125 -58.398438 Z M 2.996094 -67.84375 C 2.996094 -69.054688 3.4375 -70.101562 4.3125 -70.976562 C 5.191406 -71.855469 6.238281 -72.292969 7.449219 -72.292969 C 8.71875 -72.292969 9.792969 -71.855469 10.671875 -70.976562 C 11.550781 -70.101562 11.988281 -69.054688 11.988281 -67.84375 C 11.988281 -66.574219 11.550781 -65.496094 10.671875 -64.621094 C 9.792969 -63.742188 8.71875 -63.304688 7.449219 -63.304688 C 6.238281 -63.304688 5.191406 -63.742188 4.3125 -64.621094 C 3.4375 -65.496094 2.996094 -66.574219 2.996094 -67.84375 Z M 2.996094 -67.84375 "/></g></g></g></g></g></svg>
+      <div>
+        <h1>Architecture</h1>
+        <div class="sub">One front door. Many capabilities. Worker-ready.</div>
+      </div>
+    </div>
+    
+</header> --> 
+
+<main class="wrap">
+
+  <!-- ============================================================
+       Architecture diagram (single inline SVG, fully editable)
+       Layout: viewBox is 1320 x 820. Each row is a horizontal band.
+       ============================================================ -->
+  <section class="card diagram">
+    <h2 style="padding:4px 6px 0">Mela AI System architecture</h2>
+
+    <svg viewBox="0 0 1320 820" xmlns="http://www.w3.org/2000/svg"
+         role="img" aria-label="Mela AI system architecture">
+      <defs>
+        <linearGradient id="gBrand" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#2f5597"/><stop offset="100%" stop-color="#1d3a6b"/>
+        </linearGradient>
+        <linearGradient id="gAccent" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ff8a3d"/><stop offset="100%" stop-color="#e76a1c"/>
+        </linearGradient>
+        <linearGradient id="gFuture" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f1f5f9"/><stop offset="100%" stop-color="#e2e8f0"/>
+        </linearGradient>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+        </marker>
+        <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/>
+        </marker>
+        <style>
+          .t   { font: 600 13px -apple-system,"Segoe UI",Roboto,sans-serif; fill:#0f172a }
+          .ts  { font: 500 11px -apple-system,"Segoe UI",Roboto,sans-serif; fill:#475569 }
+          .tw  { font: 700 13px -apple-system,"Segoe UI",Roboto,sans-serif; fill:#fff }
+          .tws { font: 500 11px -apple-system,"Segoe UI",Roboto,sans-serif; fill:rgba(255,255,255,.85) }
+          .tt  { font: 700 11px -apple-system,"Segoe UI",Roboto,sans-serif;
+                 fill:#1d3a6b; text-transform:uppercase; letter-spacing:.6px }
+          .e     { stroke:#475569; stroke-width:1.6; fill:none }
+          .e-back{ stroke:#16a34a; stroke-width:1.6; stroke-dasharray:5 4; fill:none }
+        </style>
+      </defs>
+
+      <!-- ── Row 1: Clients (y 30..130) ─────────────────────────── -->
+      <text x="36" y="46" class="tt">1 . Clients</text>
+      <g>
+        <rect x="36"  y="58" width="240" height="70" rx="12" fill="url(#gAccent)"/>
+        <text x="156" y="88"  text-anchor="middle" class="tw">Web (Next.js 14)</text>
+        <text x="156" y="108" text-anchor="middle" class="tws">chat . admin . monitoring</text>
+
+        <rect x="296" y="58" width="200" height="70" rx="12" fill="url(#gAccent)"/>
+        <text x="396" y="88"  text-anchor="middle" class="tw">Voice / Mobile</text>
+        <text x="396" y="108" text-anchor="middle" class="tws">speech . MSAL SSO</text>
+
+        <rect x="516" y="58" width="200" height="70" rx="12" fill="url(#gAccent)"/>
+        <text x="616" y="88"  text-anchor="middle" class="tw">External API</text>
+        <text x="616" y="108" text-anchor="middle" class="tws">JWT bearer</text>
+      </g>
+
+      <!-- ── Row 2: Edge (y 150..240) ───────────────────────────── -->
+      <text x="36" y="166" class="tt">2 . Edge: Auth and API</text>
+      <g>
+        <rect x="36" y="178" width="1248" height="72" rx="12" fill="#fff" stroke="#cbd5e1"/>
+        <line x1="286" y1="190" x2="286" y2="238" stroke="#e2e8f0"/>
+        <line x1="552" y1="190" x2="552" y2="238" stroke="#e2e8f0"/>
+        <line x1="836" y1="190" x2="836" y2="238" stroke="#e2e8f0"/>
+        <line x1="1080" y1="190" x2="1080" y2="238" stroke="#e2e8f0"/>
+
+        <text x="161" y="210" text-anchor="middle" class="t">Entra ID (MSAL)</text>
+        <text x="161" y="228" text-anchor="middle" class="ts">SSO and OBO tokens</text>
+
+        <text x="419" y="210" text-anchor="middle" class="t">FastAPI Router</text>
+        <text x="419" y="228" text-anchor="middle" class="ts">/api/v1/*</text>
+
+        <text x="694" y="210" text-anchor="middle" class="t">RBAC . Rate-limit . Audit</text>
+        <text x="694" y="228" text-anchor="middle" class="ts">admin . user . worker</text>
+
+        <text x="958" y="210" text-anchor="middle" class="t">Notifications</text>
+        <text x="958" y="228" text-anchor="middle" class="ts">in-app . email . webhook</text>
+
+        <text x="1182" y="210" text-anchor="middle" class="t">Billing and Budgets</text>
+        <text x="1182" y="228" text-anchor="middle" class="ts">per-tenant caps</text>
+      </g>
+
+      <!-- edges: clients -> edge -->
+      <path class="e" d="M156,128 L156,178" marker-end="url(#arr)"/>
+      <path class="e" d="M396,128 L396,178" marker-end="url(#arr)"/>
+      <path class="e" d="M616,128 L616,178" marker-end="url(#arr)"/>
+
+      <!-- ── Row 3: Mela Brain (y 270..510) ─────────────────────── -->
+      <text x="36" y="286" class="tt">3 . Mela Brain: chat orchestration</text>
+      <g>
+        <rect x="36" y="298" width="860" height="220" rx="14" fill="url(#gBrand)"/>
+        <text x="56" y="324" class="tw" style="font-size:15px">Conversation engine</text>
+        <text x="56" y="342" class="tws">intent . context . tool selection . synthesis</text>
+
+        <!-- 4 columns x 2 rows, each cell 200x60, gap 6 -->
+        <g transform="translate(56,360)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Model Router</text>
+          <text x="14" y="42" class="tws">GPT-4.1, Kimi, Claude,</text>
+          <text x="14" y="56" class="tws">Gemini, Llama</text>
+        </g>
+        <g transform="translate(262,360)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">RAG / Search</text>
+          <text x="14" y="42" class="tws">Azure AI Search</text>
+          <text x="14" y="56" class="tws">vectors and ACL</text>
+        </g>
+        <g transform="translate(468,360)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Agent Memory</text>
+          <text x="14" y="42" class="tws">private notes</text>
+          <text x="14" y="56" class="tws">ACL-scoped recall</text>
+        </g>
+        <g transform="translate(674,360)">
+          <rect width="206" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Tool Executor</text>
+          <text x="14" y="42" class="tws">built-in tools</text>
+          <text x="14" y="56" class="tws">+ worker tool-bridge</text>
+        </g>
+
+        <g transform="translate(56,432)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Code Interpreter</text>
+          <text x="14" y="42" class="tws">sandboxed Python</text>
+        </g>
+        <g transform="translate(262,432)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Image . Doc . Speech</text>
+          <text x="14" y="42" class="tws">FLUX, Doc Intelligence,</text>
+          <text x="14" y="56" class="tws">Translator</text>
+        </g>
+        <g transform="translate(468,432)">
+          <rect width="200" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Projects . Workflows</text>
+          <text x="14" y="42" class="tws">collaboration</text>
+          <text x="14" y="56" class="tws">templates</text>
+        </g>
+        <g transform="translate(674,432)">
+          <rect width="206" height="62" rx="10" fill="rgba(255,255,255,.13)"/>
+          <text x="14" y="24" class="tw" style="font-size:12.5px">Outcome Orchestrator</text>
+          <text x="14" y="42" class="tws">goal, plan, synthesise</text>
+        </g>
+      </g>
+
+      <!-- ── Row 3b: Worker orchestration (right of brain) ──────── -->
+      <text x="916" y="286" class="tt">4 . Worker orchestration</text>
+      <g>
+        <rect x="916" y="298" width="368" height="220" rx="14" fill="#fff" stroke="#cbd5e1"/>
+        <text x="932" y="324" class="t">Orchestration brain</text>
+        <text x="932" y="342" class="ts">canonical types . MCP-over-HTTP . async-first</text>
+
+        <g transform="translate(932,360)">
+          <rect width="160" height="62" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="12" y="24" class="t" style="font-size:12.5px">Registry</text>
+          <text x="12" y="42" class="ts">manifests</text>
+          <text x="12" y="56" class="ts">60s cache</text>
+        </g>
+        <g transform="translate(1108,360)">
+          <rect width="160" height="62" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="12" y="24" class="t" style="font-size:12.5px">Router . Adapters</text>
+          <text x="12" y="42" class="ts">MCP, REST, gRPC</text>
+        </g>
+        <g transform="translate(932,432)">
+          <rect width="160" height="62" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="12" y="24" class="t" style="font-size:12.5px">Executor . Store</text>
+          <text x="12" y="42" class="ts">parallel</text>
+          <text x="12" y="56" class="ts">pending tasks</text>
+        </g>
+        <g transform="translate(1108,432)">
+          <rect width="160" height="62" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="12" y="24" class="t" style="font-size:12.5px">Circuit Breakers</text>
+          <text x="12" y="42" class="ts">3-state</text>
+          <text x="12" y="56" class="ts">per-worker</text>
+        </g>
+      </g>
+
+      <!-- edge: Tool Executor -> Orchestration (label well above curve) -->
+      <path class="e" d="M896,408 C906,408 912,408 916,408" marker-end="url(#arr)"/>
+      <text x="900" y="400" class="ts">tool-bridge</text>
+
+      <!-- edges: Edge -> Brain -->
+      <path class="e" d="M419,250 L419,298" marker-end="url(#arr)"/>
+      <path class="e" d="M694,250 L694,298" marker-end="url(#arr)"/>
+      <!-- edge: Edge -> Orchestration -->
+      <path class="e" d="M958,250 L958,298" marker-end="url(#arr)"/>
+
+      <!-- ── Row 5: Connectors (left, y 540..690) ───────────────── -->
+      <text x="36" y="556" class="tt">5 . Enterprise connectors (read)</text>
+      <g>
+        <rect x="36" y="568" width="860" height="120" rx="12" fill="#fff" stroke="#cbd5e1"/>
+        <g transform="translate(50,584)">
+          <rect width="195" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">SharePoint</text>
+        </g>
+        <g transform="translate(255,584)">
+          <rect width="195" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">OneDrive</text>
+        </g>
+        <g transform="translate(460,584)">
+          <rect width="195" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">Outlook / Email</text>
+        </g>
+        <g transform="translate(665,584)">
+          <rect width="217" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">Planner . Graph API</text>
+        </g>
+        <g transform="translate(50,636)">
+          <rect width="195" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">Org Website</text>
+        </g>
+        <g transform="translate(255,636)">
+          <rect width="195" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">Public Web</text>
+        </g>
+        <g transform="translate(460,636)">
+          <rect width="422" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="14" y="25" class="t" style="font-size:12.5px">Ingestion worker (delta and full sync)</text>
+        </g>
+      </g>
+
+      <!-- ── Row 6: Worker apps (future, y 540..690) ────────────── -->
+      <text x="916" y="556" class="tt">6 . Worker apps (future)</text>
+      <g>
+        <rect x="916" y="568" width="368" height="120" rx="12"
+              fill="url(#gFuture)" stroke="#cbd5e1" stroke-dasharray="5 4"/>
+        <g transform="translate(932,584)">
+          <rect width="166" height="40" rx="8" fill="#fff" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+          <circle cx="14" cy="20" r="5" fill="#94a3b8"/>
+          <text x="28" y="18" class="t" style="font-size:12.5px">Task Radar</text>
+          <text x="28" y="32" class="ts" style="font-size:10px">in progress</text>
+        </g>
+        <g transform="translate(1108,584)">
+          <rect width="160" height="40" rx="8" fill="#fff" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+          <circle cx="14" cy="20" r="5" fill="#cbd5e1"/>
+          <text x="28" y="18" class="t" style="font-size:12.5px">Meeting Asst.</text>
+          <text x="28" y="32" class="ts" style="font-size:10px">planned</text>
+        </g>
+        <g transform="translate(932,636)">
+          <rect width="166" height="40" rx="8" fill="#fff" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+          <circle cx="14" cy="20" r="5" fill="#cbd5e1"/>
+          <text x="28" y="18" class="t" style="font-size:12.5px">CRM Agent</text>
+          <text x="28" y="32" class="ts" style="font-size:10px">planned</text>
+        </g>
+        <g transform="translate(1108,636)">
+          <rect width="160" height="40" rx="8" fill="#fff" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+          <circle cx="14" cy="20" r="5" fill="#cbd5e1"/>
+          <text x="28" y="18" class="t" style="font-size:12.5px">+ register manifest</text>
+          <text x="28" y="32" class="ts" style="font-size:10px">zero brain change</text>
+        </g>
+      </g>
+
+      <!-- edge: brain -> connectors -->
+      <path class="e" d="M340,518 L340,568" marker-end="url(#arr)"/>
+      <text x="348" y="548" class="ts">read</text>
+
+      <!-- edges: orchestration -> workers (out and back) -->
+      <path class="e"      d="M1020,518 L1000,568" marker-end="url(#arr)"/>
+      <path class="e-back" d="M1180,568 L1200,518" marker-end="url(#arrG)"/>
+      <text x="1006" y="546" class="ts">task</text>
+      <text x="1190" y="546" class="ts" style="fill:#16a34a">callback</text>
+
+      <!-- ── Row 7: Data and platform (y 720..790) ──────────────── -->
+      <text x="36" y="716" class="tt">7 . Data and platform</text>
+      <g>
+        <rect x="36" y="728" width="1248" height="62" rx="12" fill="#fff" stroke="#cbd5e1"/>
+        <g transform="translate(50,744)">
+          <text x="0" y="14" class="t" style="font-size:12.5px">SQL (SQLite, Postgres)</text>
+          <text x="0" y="32" class="ts">users, chats, projects, registry, traces</text>
+        </g>
+        <g transform="translate(310,744)">
+          <text x="0" y="14" class="t" style="font-size:12.5px">Azure AI Search</text>
+          <text x="0" y="32" class="ts">vector and keyword, ACL filters, cache</text>
+        </g>
+        <g transform="translate(570,744)">
+          <text x="0" y="14" class="t" style="font-size:12.5px">Azure Blob Storage</text>
+          <text x="0" y="32" class="ts">documents, uploads, agent memory</text>
+        </g>
+        <g transform="translate(820,744)">
+          <text x="0" y="14" class="t" style="font-size:12.5px">Azure AI Foundry</text>
+          <text x="0" y="32" class="ts">LLM endpoints, embeddings, vision</text>
+        </g>
+        <g transform="translate(1050,744)">
+          <text x="0" y="14" class="t" style="font-size:12.5px">App Insights and Audit</text>
+          <text x="0" y="32" class="ts">tracing, metrics, compliance log</text>
+        </g>
+      </g>
+    </svg>
+
+    <div class="legend">
+      <span><span class="sw" style="background:linear-gradient(135deg,#ff8a3d,#e76a1c)"></span>Clients</span>
+      <span><span class="sw" style="background:linear-gradient(135deg,#2f5597,#1d3a6b)"></span>Mela brain</span>
+      <span><span class="sw" style="background:#fff;border:1px solid #cbd5e1"></span>Platform and connectors</span>
+      <span><span class="sw" style="background:#e2e8f0;border:1px dashed #94a3b8"></span>Future / worker apps</span>
+      <span><span class="sw" style="background:#475569;height:3px;border-radius:2px"></span>Request</span>
+      <span><span class="sw" style="background:#16a34a;height:3px;border-radius:2px"></span>Async callback</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>How to read this</h2>
+    <p>
+      Top to bottom is the request path. Clients reach the edge, the brain composes
+      the answer using its tools and connectors, and worker apps (right column,
+      dashed) are dispatched through the orchestration layer with async callbacks.
+      Worker apps are the next horizon. None are live in production yet.
+    </p>
+  </section>
+
+</main>
+
+
+</body>
+</html>

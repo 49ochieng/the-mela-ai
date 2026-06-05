@@ -1,0 +1,58 @@
+{
+  "_comment": "Deterministic resource naming convention for Mela AI. Override any name by setting the corresponding env var before running preflight.",
+  "subscription": "armely-isv",
+  "resourceGroup": "rg-ai",
+  "location": "eastus2",
+  "environmentName": "armely-dev",
+  "resources": {
+    "appServicePlan": {
+      "name": "asp-armely-ai",
+      "envVar": "APP_SERVICE_PLAN_NAME",
+      "type": "Microsoft.Web/serverfarms"
+    },
+    "backendApp": {
+      "name": "armely-ai-api",
+      "envVar": "BACKEND_APP_NAME",
+      "type": "Microsoft.Web/sites",
+      "url": "https://armely-ai-api.azurewebsites.net"
+    },
+    "frontendApp": {
+      "name": "armely-ai-web",
+      "envVar": "FRONTEND_APP_NAME",
+      "type": "Microsoft.Web/sites",
+      "url": "https://armely-ai-web.azurewebsites.net"
+    },
+    "keyVault": {
+      "name": "kv-armely-ai",
+      "envVar": "KEY_VAULT_NAME",
+      "type": "Microsoft.KeyVault/vaults"
+    },
+    "appInsights": {
+      "name": "ai-armely-ai",
+      "envVar": "APP_INSIGHTS_NAME",
+      "type": "Microsoft.Insights/components"
+    },
+    "logAnalytics": {
+      "name": "log-armely-ai",
+      "envVar": "LOG_ANALYTICS_NAME",
+      "type": "Microsoft.OperationalInsights/workspaces"
+    },
+    "storageAccount": {
+      "name": "starmelyai",
+      "envVar": "STORAGE_ACCOUNT_NAME",
+      "type": "Microsoft.Storage/storageAccounts",
+      "note": "Only provisioned when provisionStorage=true"
+    }
+  },
+  "secretNames": {
+    "jwtSecretKey": "jwt-secret-key",
+    "azureClientSecret": "azure-client-secret",
+    "aiFoundryApiKey": "ai-foundry-api-key",
+    "azureOpenAiApiKey": "azure-openai-api-key",
+    "azureSpeechKey": "azure-speech-key",
+    "azureDalleApiKey": "azure-dalle-api-key",
+    "azureSearchAdminKey": "azure-search-admin-key",
+    "azureStorageAccountKey": "azure-storage-account-key",
+    "databaseUrl": "database-url"
+  }
+}

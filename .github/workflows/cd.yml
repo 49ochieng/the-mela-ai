@@ -1,0 +1,645 @@
+name: CD — Deploy to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: false
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a running deploy
+
+permissions:
+  id-token: write    # required for OIDC login (no client secret)
+  contents: read
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  RESOURCE_GROUP: Mela-AI_CLIENT_APPS
+  BACKEND_APP: mela-ai-api
+  FRONTEND_APP: mela-ai-web
+  KEY_VAULT_NAME: kv-mela-ai
+  LOCATION: westus2
+  AZURE_ENV_NAME: mela-ai-prod
+
+jobs:
+  # ── Build ─────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      backend-artifact: backend-${{ github.sha }}
+      frontend-artifact: frontend-${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ── Backend: install → lint → test → package ─────────────────────────────
+      - name: Install Python dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Lint backend (ruff)
+        working-directory: backend
+        run: |
+          pip install ruff --quiet
+          ruff check app/    # rules from backend/ruff.toml — same as CI
+
+      - name: Test backend (pytest)
+        working-directory: backend
+        env:
+          APP_ENV: development
+          DEBUG: "true"
+          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+          JWT_SECRET_KEY: "cd-test-key-not-for-production"
+          AZURE_TENANT_ID: ""
+          AZURE_CLIENT_ID: ""
+        run: |
+          pip install pytest pytest-asyncio httpx --quiet
+          if [ -d tests ]; then
+            pytest tests/ -v --tb=short -x -k "not live_prod"
+          else
+            echo "No tests directory found — skipping"
+          fi
+
+      - name: Python dependency audit (pip-audit)
+        working-directory: backend
+        run: |
+          pip install pip-audit --quiet
+          pip-audit -r requirements.txt
+
+      - name: Package backend
+        working-directory: backend
+        run: |
+          mkdir -p ../artifacts
+          zip -r ../artifacts/backend.zip . \
+            --exclude "*.pyc" \
+            --exclude "__pycache__/*" \
+            --exclude ".pytest_cache/*" \
+            --exclude "*.db" \
+            --exclude ".env*" \
+            --exclude "tests/*"
+
+      # ── Frontend: install → lint → typecheck → build → package ───────────────
+      - name: Install Node dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Type check frontend
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build Next.js (standalone)
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://${{ env.BACKEND_APP }}.azurewebsites.net
+          NEXT_PUBLIC_API_VERSION: v1
+          NEXT_PUBLIC_APP_NAME: "Mela AI"
+          NEXT_PUBLIC_ORG_NAME: Armely
+          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ vars.AZURE_AD_CLIENT_ID }}
+          NEXT_PUBLIC_ENTRA_AUTH_CLIENT_ID: ${{ vars.ENTRA_AUTH_CLIENT_ID }}
+          NEXT_PUBLIC_AZURE_AD_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          NEXT_PUBLIC_API_SCOPE: ${{ vars.NEXT_PUBLIC_API_SCOPE }}
+          # FRONTEND_URL GitHub variable lets you switch domains without touching code.
+          # Set it to https://mela.armely.com when the custom domain is live.
+          # Falls back to the App Service default URL so prod works immediately.
+          NEXT_PUBLIC_REDIRECT_URI: ${{ vars.FRONTEND_URL || format('https://{0}.azurewebsites.net', env.FRONTEND_APP) }}
+          NEXT_PUBLIC_ENABLE_VOICE: "true"
+          NEXT_PUBLIC_ENABLE_FILE_UPLOAD: "true"
+          NEXT_PUBLIC_ENABLE_AGENTS: "true"
+          NEXT_PUBLIC_ENABLE_RAG: "true"
+          NEXT_PUBLIC_ENABLE_TRANSLATION: "true"
+          NEXT_PUBLIC_ENABLE_IMAGE_GENERATION: "true"
+          NEXT_PUBLIC_ENABLE_DOCUMENT_INTELLIGENCE: "true"
+          NEXT_PUBLIC_ENABLE_ANALYTICS: "false"
+          # Dev login removed — Microsoft sign-in only
+        run: npm run build
+
+      - name: NPM dependency audit (high+)
+        working-directory: frontend
+        continue-on-error: true  # Next.js 14.x has unpatched CVEs - allow deployment
+        run: npm audit --audit-level=high || echo "::warning::NPM audit found vulnerabilities - review required"
+
+      - name: Package frontend (standalone)
+        working-directory: frontend
+        run: |
+          mkdir -p ../artifacts/frontend-pkg
+          cp -r .next/standalone/. ../artifacts/frontend-pkg/
+          mkdir -p ../artifacts/frontend-pkg/.next
+          cp -r .next/static ../artifacts/frontend-pkg/.next/static
+          cp -r public ../artifacts/frontend-pkg/public
+          # Zip from INSIDE the dir so server.js is at the ZIP root (required by WEBSITE_RUN_FROM_PACKAGE=1)
+          cd ../artifacts/frontend-pkg
+          zip -r ../frontend.zip .
+          cd ..
+          rm -rf frontend-pkg/
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: backend-${{ github.sha }}
+          path: artifacts/backend.zip
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: frontend-${{ github.sha }}
+          path: artifacts/frontend.zip
+
+  # ── Provision + Deploy ────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout (for Bicep templates + scripts)
+        uses: actions/checkout@v4.2.2
+
+      # OIDC login — no client secret, uses federated credential
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Preflight: detect existing resources ─────────────────────────────────
+      - name: Preflight — detect existing resources
+        id: preflight
+        run: |
+          chmod +x scripts/preflight.sh
+
+          # Override output dir for CI (no .azure/ folder in workspace)
+          export PREFLIGHT_BASE_DIR=".azure"
+          export AZURE_ENV_NAME="${{ env.AZURE_ENV_NAME }}"
+          export RESOURCE_GROUP="${{ env.RESOURCE_GROUP }}"
+          export AZURE_LOCATION="${{ env.LOCATION }}"
+          export AZURE_SUBSCRIPTION_ID="${{ vars.AZURE_SUBSCRIPTION_ID }}"
+          export AZURE_SUBSCRIPTION_NAME="${{ vars.AZURE_SUBSCRIPTION_ID }}"
+
+          bash scripts/preflight.sh
+
+          # Read preflight outputs
+          PREFLIGHT=".azure/${{ env.AZURE_ENV_NAME }}/preflight.env"
+          if [ -f "$PREFLIGHT" ]; then
+            while IFS='=' read -r key val; do
+              echo "$key=$val" >> $GITHUB_ENV
+            done < "$PREFLIGHT"
+          fi
+
+      # ── Provision infrastructure (Bicep) ─────────────────────────────────────
+      - name: Get deploy principal Object ID
+        id: sp-id
+        run: |
+          OBJECT_ID=$(az ad sp show --id ${{ vars.AZURE_CLIENT_ID }} --query id -o tsv 2>/dev/null || echo "")
+          echo "DEPLOY_PRINCIPAL_ID=$OBJECT_ID" >> $GITHUB_ENV
+
+      - name: Deploy Bicep infrastructure
+        run: |
+          az deployment group create \
+            --name "mela-ai-infra-$(date +%Y%m%d%H%M%S)" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              environmentName="${{ env.AZURE_ENV_NAME }}" \
+              location="${{ env.LOCATION }}" \
+              backendAppName="${{ env.BACKEND_APP }}" \
+              frontendAppName="${{ env.FRONTEND_APP }}" \
+              keyVaultName="${{ env.KEY_VAULT_NAME }}" \
+              appInsightsName="ai-armely-ai" \
+              logAnalyticsName="log-armely-ai" \
+              useExistingAppServicePlan="${{ env.USE_EXISTING_PLAN || 'false' }}" \
+              useExistingBackendApp="${{ env.USE_EXISTING_BACKEND || 'false' }}" \
+              useExistingFrontendApp="${{ env.USE_EXISTING_FRONTEND || 'false' }}" \
+              useExistingKeyVault="${{ env.USE_EXISTING_KEYVAULT || 'false' }}" \
+              useExistingAppInsights="true" \
+              appServicePlanSku="${{ inputs.environment == 'dev' && 'B1' || 'P1v3' }}" \
+              provisionRedis="true" \
+              redisCacheName="redis-mela-ai" \
+              redisSkuName="Basic" \
+              redisSkuCapacity=0 \
+              deployPrincipalObjectId="${{ env.DEPLOY_PRINCIPAL_ID }}" \
+              deployPrincipalType="ServicePrincipal" \
+            --output table
+
+      # Allow Azure RBAC role assignments (applied in Bicep) to propagate before
+      # writing to Key Vault — new role assignments can take up to 60s to take effect.
+      - name: Wait for RBAC propagation
+        run: |
+          echo "Waiting 60s for Key Vault role assignment to propagate..."
+          sleep 60
+
+      # ── Write secrets to Key Vault ────────────────────────────────────────────
+      # Secrets are stored as GitHub Actions secrets (encrypted, never echoed)
+      # and written to Key Vault here as a secondary store.
+      # NOTE: continue-on-error=true because App Settings (next step) is the
+      # authoritative source — Key Vault is a backup/reference store only.
+      # AKV10046 (token validation) can occur on RBAC propagation delay; the
+      # deploy must not be blocked by this non-critical step.
+      - name: Write secrets to Key Vault
+        continue-on-error: true
+        env:
+          KV: ${{ env.KEY_VAULT_NAME }}
+        run: |
+          write_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              az keyvault secret set --vault-name "$KV" --name "$name" --value "$value" --output none
+            else
+              echo "Skipping $name (empty)"
+            fi
+          }
+
+          write_secret "jwt-secret-key"            "${{ secrets.JWT_SECRET_KEY }}"
+          write_secret "azure-client-secret"      "${{ secrets.AZURE_CLIENT_SECRET }}"
+          write_secret "ai-foundry-api-key"       "${{ secrets.AI_FOUNDRY_API_KEY }}"
+          write_secret "azure-openai-api-key"     "${{ secrets.AI_FOUNDRY_API_KEY }}"
+          write_secret "azure-speech-key"         "${{ secrets.AZURE_SPEECH_KEY }}"
+          write_secret "azure-dalle-api-key"      "${{ secrets.AZURE_DALLE_API_KEY }}"
+          write_secret "azure-search-admin-key"   "${{ secrets.AZURE_SEARCH_ADMIN_KEY }}"
+          write_secret "azure-storage-account-key" "${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}"
+          write_secret "anthropic-api-key"        "${{ secrets.ANTHROPIC_API_KEY }}"
+          write_secret "gpt4o-api-key"            "${{ secrets.GPT4O_API_KEY }}"
+          write_secret "azure-translator-key"     "${{ secrets.AZURE_TRANSLATOR_KEY }}"
+          DB_URL="${{ secrets.DATABASE_URL }}"
+          write_secret "database-url" "${DB_URL:-sqlite+aiosqlite:////home/site/wwwroot/mela_dev.db}"
+
+      # ── Additional non-secret App Settings ───────────────────────────────────
+      - name: Configure backend App Settings
+        run: |
+          # Derive environment-specific flags.
+          # prod: APP_ENV=production, DEBUG=false, no dev login.
+          # dev/staging: APP_ENV=development, DEBUG=true, dev login enabled.
+          # Push to main always means production. 'dev' is only when manually dispatched.
+          TARGET_ENV="${{ inputs.environment || 'prod' }}"
+          if [ "$TARGET_ENV" = "prod" ]; then
+            APP_ENV_VAL="production"
+            DEBUG_VAL="false"
+          else
+            APP_ENV_VAL="development"
+            DEBUG_VAL="true"
+          fi
+
+          az webapp config appsettings set \
+            --name "${{ env.BACKEND_APP }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --settings \
+              APP_ENV="$APP_ENV_VAL" \
+              DEBUG="$DEBUG_VAL" \
+              DEV_USERNAME="${{ vars.DEV_USERNAME || 'dev' }}" \
+              DEV_PASSWORD="${{ secrets.DEV_PASSWORD }}" \
+              AZURE_TENANT_ID="${{ vars.AZURE_TENANT_ID }}" \
+              AZURE_CLIENT_ID="${{ vars.AZURE_AD_CLIENT_ID }}" \
+              AZURE_CLIENT_SECRET="${{ secrets.AZURE_CLIENT_SECRET }}" \
+              JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              AI_FOUNDRY_ENDPOINT="${{ vars.AI_FOUNDRY_ENDPOINT || 'https://AI-FOUNDRY-MAIN-001.cognitiveservices.azure.com' }}" \
+              AI_FOUNDRY_API_KEY="${{ secrets.AI_FOUNDRY_API_KEY }}" \
+              AI_FOUNDRY_API_VERSION="2024-05-01-preview" \
+              AZURE_OPENAI_ENDPOINT="${{ vars.AI_FOUNDRY_ENDPOINT || 'https://AI-FOUNDRY-MAIN-001.cognitiveservices.azure.com' }}" \
+              AZURE_OPENAI_API_KEY="${{ secrets.AI_FOUNDRY_API_KEY }}" \
+              AZURE_OPENAI_API_VERSION="2024-05-01-preview" \
+              AZURE_OPENAI_CHAT_DEPLOYMENT="gpt-4.1" \
+              AZURE_OPENAI_FAST_DEPLOYMENT="Kimi-K2.5" \
+              AZURE_OPENAI_VISION_DEPLOYMENT="gpt-4.1" \
+              DEPLOYMENT_GPT52_CHAT="gpt-5.2-chat" \
+              DEPLOYMENT_GPT41="gpt-4.1" \
+              DEPLOYMENT_KIMI_K25="Kimi-K2.5" \
+              DEPLOYMENT_MISTRAL_LARGE_3="Mistral-Large-3" \
+              DEPLOYMENT_GROK3_MINI="grok-3-mini" \
+              DEPLOYMENT_LLAMA4_MAVERICK="Llama-4-Maverick-17B-128E-Instruct-FP8" \
+              GOOGLE_AI_API_KEY="${{ secrets.GOOGLE_AI_API_KEY }}" \
+              GEMINI_ENABLED="true" \
+              GEMINI_MAX_TOKENS="4096" \
+              DEPLOYMENT_EMBEDDING="text-embedding-3-large" \
+              AZURE_OPENAI_EMBEDDING_DEPLOYMENT="text-embedding-3-large" \
+              GPT4O_ENDPOINT="${{ vars.GPT4O_ENDPOINT || 'https://poc-froundry.cognitiveservices.azure.com' }}" \
+              GPT4O_API_KEY="${{ secrets.GPT4O_API_KEY }}" \
+              GPT4O_DEPLOYMENT="gpt-4o" \
+              ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
+              ANTHROPIC_ENABLED="true" \
+              ANTHROPIC_RPM_LIMIT="3" \
+              ANTHROPIC_MAX_TOKENS_SONNET="4096" \
+              ANTHROPIC_MAX_TOKENS_HAIKU="2048" \
+              CLAUDE_DAILY_QUESTION_LIMIT="5" \
+              FLUX_ENDPOINT="${{ vars.FLUX_ENDPOINT }}" \
+              FLUX_API_KEY="${{ secrets.FLUX_API_KEY }}" \
+              FLUX_DEPLOYMENT="${{ vars.FLUX_DEPLOYMENT || 'FLUX.1-Kontext-pro' }}" \
+              FLUX_API_VERSION="2024-05-01-preview" \
+              IMAGE_PROVIDER_ORDER="flux,dalle" \
+              AZURE_DALLE_ENDPOINT="${{ vars.AZURE_DALLE_ENDPOINT || '' }}" \
+              AZURE_DALLE_API_KEY="${{ secrets.AZURE_DALLE_API_KEY }}" \
+              AZURE_DALLE_API_VERSION="2024-04-01-preview" \
+              AZURE_DALLE_DEPLOYMENT="dall-e-3" \
+              AZURE_SPEECH_KEY="${{ secrets.AZURE_SPEECH_KEY }}" \
+              AZURE_SPEECH_ENDPOINT="${{ vars.AZURE_SPEECH_ENDPOINT || 'https://mc-chat-demo-speech-d6vxfwix5t6f4.cognitiveservices.azure.com/' }}" \
+              AZURE_SPEECH_REGION="${{ vars.AZURE_SPEECH_REGION || 'eastus2' }}" \
+              AZURE_SPEECH_LANGUAGE="en-US" \
+              AZURE_SEARCH_ENDPOINT="${{ vars.AZURE_SEARCH_ENDPOINT || 'https://armelyaisearch.search.windows.net' }}" \
+              AZURE_SEARCH_ADMIN_KEY="${{ secrets.AZURE_SEARCH_ADMIN_KEY }}" \
+              AZURE_SEARCH_QUERY_KEY="${{ secrets.AZURE_SEARCH_ADMIN_KEY }}" \
+              AZURE_SEARCH_INDEX_NAME="fileshare-documents" \
+              AZURE_SEARCH_VECTOR_INDEX_NAME="fileshare-vector-documents" \
+              AZURE_SEARCH_CACHE_INDEX_NAME="mela-query-cache" \
+              AZURE_STORAGE_ACCOUNT_NAME="${{ vars.AZURE_STORAGE_ACCOUNT_NAME || 'melastorage' }}" \
+              AZURE_STORAGE_ACCOUNT_KEY="${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}" \
+              AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+              AZURE_STORAGE_CONTAINER_DOCUMENTS="armelymela" \
+              AZURE_STORAGE_CONTAINER_UPLOADS="armelymela" \
+              AZURE_STORAGE_CONTAINER_AGENT_MEMORY="armelymela" \
+              AZURE_TRANSLATOR_KEY="${{ secrets.AZURE_TRANSLATOR_KEY }}" \
+              AZURE_TRANSLATOR_ENDPOINT="https://api.cognitive.microsofttranslator.com/" \
+              AZURE_TRANSLATOR_REGION="eastus" \
+              SHAREPOINT_SITES="https://armely.sharepoint.com/sites/Test-team,https://armely.sharepoint.com/ZapManufacturing,https://armely.sharepoint.com/sites/LearningResources,https://armely.sharepoint.com/sites/ArmelyLLC" \
+              ONEDRIVE_ROOT="https://armely-my.sharepoint.com/" \
+              ORG_WEBSITE_ALLOWLIST="armely.com" \
+              ORG_WEBSITE_CRAWL_DEPTH="3" \
+              CONNECTOR_SHAREPOINT_ENABLED="true" \
+              CONNECTOR_ONEDRIVE_ENABLED="true" \
+              CONNECTOR_EMAIL_ENABLED="false" \
+              CONNECTOR_PLANNER_ENABLED="true" \
+              CONNECTOR_ORG_WEBSITE_ENABLED="true" \
+              GRAPH_SENDER_EMAIL="ai.solutions@armely.com" \
+              GRAPH_DEFAULT_PLANNER_PLAN_ID="${{ vars.GRAPH_DEFAULT_PLANNER_PLAN_ID || 'jJua_dRywEqaacMiLV2dDGUACJ7x' }}" \
+              BOOTSTRAP_ADMIN_EMAILS="${{ vars.BOOTSTRAP_ADMIN_EMAILS }}" \
+              BOOTSTRAP_ADMIN_OIDS="${{ vars.BOOTSTRAP_ADMIN_OIDS }}" \
+              ENTRA_AUTH_CLIENT_ID="${{ vars.ENTRA_AUTH_CLIENT_ID || vars.AZURE_AD_CLIENT_ID }}" \
+              ENABLE_DEV_LOGIN="false" \
+              COMMIT_SHA="${{ github.sha }}" \
+              AZURE_LOCATION="${{ env.LOCATION }}" \
+              DATABASE_URL="${{ secrets.DATABASE_URL || 'sqlite+aiosqlite:////home/site/wwwroot/mela_prod.db' }}" \
+              'REDIS_URL=@Microsoft.KeyVault(VaultName=${{ env.KEY_VAULT_NAME }};SecretName=redis-connection-string)' \
+              'REDIS_KEY_PREFIX=mela:' \
+              REDIS_MAX_CONNECTIONS="50" \
+              'CORS_ORIGINS=["https://mela-ai-web.azurewebsites.net","https://mela.armely.com"]' \
+              SCM_DO_BUILD_DURING_DEPLOYMENT="false" \
+              WEBSITES_CONTAINER_START_TIME_LIMIT="1800" \
+              ALERT_ADMIN_EMAIL="edgar.mcochieng@armely.com" \
+              ALERT_ENABLED="true" \
+              ALERT_COOLDOWN_MINUTES="10" \
+              CHAT_RATE_LIMIT_PER_MIN="20" \
+              ADMIN_ME_RATE_LIMIT_PER_MIN="60" \
+              DAILY_UPLOAD_QUOTA_MB="500" \
+              ENABLE_SOFT_DELETE="true" \
+              RETENTION_DAYS_CONVERSATIONS="365" \
+              RETENTION_DAYS_DOCUMENTS="365" \
+              ENABLE_GDPR_ENDPOINTS="true" \
+              ENFORCE_SENSITIVITY_LABELS="true" \
+              ENFORCE_TOOL_ROLE_GATES="true" \
+            --output none
+
+      - name: Configure frontend App Settings (non-secrets)
+        run: |
+          az webapp config appsettings set \
+            --name "${{ env.FRONTEND_APP }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --settings \
+              NEXT_PUBLIC_API_URL="https://${{ env.BACKEND_APP }}.azurewebsites.net" \
+              NEXT_PUBLIC_ENTRA_AUTH_CLIENT_ID="${{ vars.ENTRA_AUTH_CLIENT_ID }}" \
+              NEXT_PUBLIC_AZURE_AD_CLIENT_ID="${{ vars.ENTRA_AUTH_CLIENT_ID }}" \
+              NEXT_PUBLIC_AZURE_AD_TENANT_ID="${{ vars.AZURE_TENANT_ID }}" \
+              NEXT_PUBLIC_API_SCOPE="${{ vars.NEXT_PUBLIC_API_SCOPE }}" \
+              NEXT_PUBLIC_REDIRECT_URI="${{ vars.FRONTEND_URL || format('https://{0}.azurewebsites.net', env.FRONTEND_APP) }}" \
+              NEXT_PUBLIC_API_URL="https://${{ env.BACKEND_APP }}.azurewebsites.net" \
+              BOOTSTRAP_ADMIN_EMAILS="${{ vars.BOOTSTRAP_ADMIN_EMAILS }}" \
+            --output none
+
+      # ── Download and deploy build artifacts ──────────────────────────────────
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-${{ github.sha }}
+          path: artifacts/
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: frontend-${{ github.sha }}
+          path: artifacts/
+
+      - name: Deploy backend to App Service
+        # Kudu ZipDeploy — extracts ZIP to wwwroot; startup.sh handles pip install on first boot.
+        # Retries the POST until SCM is available (Bicep/App Settings changes trigger SCM restart).
+        run: |
+          USER=$(az webapp deployment list-publishing-credentials \
+            --name "${{ env.BACKEND_APP }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query publishingUserName -o tsv)
+          PASS=$(az webapp deployment list-publishing-credentials \
+            --name "${{ env.BACKEND_APP }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query publishingPassword -o tsv)
+
+          # Initial wait — give time for App Service restarts (from Bicep + App Settings) to begin
+          echo "Initial 60s wait for App Service to begin restart cycle..."
+          sleep 60
+
+          # Retry ZipDeploy POST until SCM accepts it (handles SCM restart window)
+          HTTP_CODE="000"
+          for attempt in $(seq 1 15); do
+            echo "Deploy attempt $attempt/15..."
+            HTTP_CODE=$(curl -s -w "%{http_code}" \
+              -X POST \
+              "https://${{ env.BACKEND_APP }}.scm.azurewebsites.net/api/zipdeploy?isAsync=true" \
+              -u "$USER:$PASS" \
+              --data-binary "@artifacts/backend.zip" \
+              -H "Content-Type: application/zip" \
+              --max-time 60 \
+              -o /tmp/deploy-out.txt 2>/dev/null || echo "000")
+            echo "HTTP Status: $HTTP_CODE"
+            cat /tmp/deploy-out.txt 2>/dev/null || true
+            [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ] && break
+            echo "SCM not ready (HTTP $HTTP_CODE). Waiting 30s before retry..."
+            sleep 30
+          done
+          [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "200" ] || \
+            { echo "ZipDeploy failed after 15 attempts (last HTTP: $HTTP_CODE)"; exit 1; }
+
+          echo "Deployment accepted. Waiting for extraction..."
+          sleep 15
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -u "$USER:$PASS" \
+              "https://${{ env.BACKEND_APP }}.scm.azurewebsites.net/api/deployments/latest" \
+              2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',0))" 2>/dev/null || echo "0")
+            echo "Deploy status ($i/20): $STATUS"
+            [ "$STATUS" = "4" ] && { echo "Deploy succeeded!"; break; }
+            # status 3: "stopped due to SCM restart" — code IS in wwwroot; startup.sh self-heals
+            [ "$STATUS" = "3" ] && { echo "WARNING: Deploy interrupted (SCM restart). startup.sh will install packages."; break; }
+            sleep 10
+          done
+
+      - name: Deploy frontend to App Service
+        uses: azure/webapps-deploy@v3.0.1
+        with:
+          app-name: ${{ env.FRONTEND_APP }}
+          package: artifacts/frontend.zip
+
+      # ── Post-deploy validation ────────────────────────────────────────────────
+      - name: Wait for backend to start
+        # startup.sh runs pip install on first boot (5-10 min), cached on subsequent boots (~30s)
+        # Since .packages/ is preserved across ZipDeploys, this is fast after first deployment
+        run: sleep 60
+
+      - name: Validate health endpoint
+        run: |
+          HEALTH_URL="https://${{ env.BACKEND_APP }}.azurewebsites.net/health"
+          echo "Checking: $HEALTH_URL"
+
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+            echo "Attempt $i/20 — HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed!"
+              break
+            fi
+            if [ "$i" = "20" ]; then
+              echo "Health check failed after 20 attempts (6+ minutes)"
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Print deployment summary
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Deployment successful!"
+          echo "  Commit   : ${{ github.sha }}"
+          echo "  Branch   : ${{ github.ref_name }}"
+          echo "  Backend  : https://${{ env.BACKEND_APP }}.azurewebsites.net"
+          echo "  Frontend : https://${{ env.FRONTEND_APP }}.azurewebsites.net"
+          echo "  Health   : https://${{ env.BACKEND_APP }}.azurewebsites.net/health"
+          echo ""
+          echo "  View logs:"
+          echo "    az webapp log tail -n ${{ env.BACKEND_APP }} -g ${{ env.RESOURCE_GROUP }}"
+          echo "    az webapp log tail -n ${{ env.FRONTEND_APP }} -g ${{ env.RESOURCE_GROUP }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # ── Alert on failure ─────────────────────────────────────────────────
+      - name: Notify on failure
+        if: failure()
+        env:
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_AD_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          python3 << 'PYEOF'
+          import os, sys
+          try:
+              import urllib.request, json
+
+              tenant_id   = os.environ["AZURE_TENANT_ID"]
+              client_id   = os.environ["AZURE_CLIENT_ID"]
+              client_secret = os.environ["AZURE_CLIENT_SECRET"]
+              run_url     = os.environ.get("GITHUB_RUN_URL", "")
+              commit_sha  = os.environ.get("COMMIT_SHA", "")[:7]
+              branch      = os.environ.get("BRANCH", "")
+              actor       = os.environ.get("ACTOR", "")
+              sender      = "ai.solutions@armely.com"
+              recipient   = "edgar.mcochieng@armely.com"
+
+              # Acquire app-only token
+              token_data = urllib.parse.urlencode({
+                  "grant_type": "client_credentials",
+                  "client_id": client_id,
+                  "client_secret": client_secret,
+                  "scope": "https://graph.microsoft.com/.default",
+              }).encode()
+
+              import urllib.parse
+              token_req = urllib.request.Request(
+                  f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+                  data=urllib.parse.urlencode({
+                      "grant_type": "client_credentials",
+                      "client_id": client_id,
+                      "client_secret": client_secret,
+                      "scope": "https://graph.microsoft.com/.default",
+                  }).encode(),
+                  method="POST",
+              )
+              with urllib.request.urlopen(token_req, timeout=20) as r:
+                  token = json.loads(r.read())["access_token"]
+
+              html_body = f"""
+              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                <div style="background:#dc2626;padding:16px 24px;border-radius:8px 8px 0 0;">
+                  <h1 style="color:white;margin:0;font-size:18px;">Mela AI CD Pipeline FAILED</h1>
+                </div>
+                <div style="background:white;border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+                  <table style="width:100%;border-collapse:collapse;">
+                    <tr><td style="padding:6px 0;color:#6b7280;width:100px;">Commit</td>
+                        <td style="padding:6px 0;font-weight:600;">{commit_sha}</td></tr>
+                    <tr><td style="padding:6px 0;color:#6b7280;">Branch</td>
+                        <td style="padding:6px 0;">{branch}</td></tr>
+                    <tr><td style="padding:6px 0;color:#6b7280;">Triggered by</td>
+                        <td style="padding:6px 0;">{actor}</td></tr>
+                  </table>
+                  <p style="margin:16px 0 8px;color:#374151;">
+                    The deploy pipeline failed. Check logs for root cause.
+                  </p>
+                  <a href="{run_url}" style="background:#dc2626;color:white;padding:8px 16px;
+                    border-radius:6px;text-decoration:none;font-size:14px;display:inline-block;
+                    margin-top:8px;">View Failed Run</a>
+                  <p style="margin-top:20px;color:#9ca3af;font-size:12px;">
+                    Mela AI &middot; Armely &middot; GitHub Actions
+                  </p>
+                </div>
+              </div>"""
+
+              email_payload = json.dumps({
+                  "message": {
+                      "subject": f"[Mela AI CD] Deploy FAILED — {commit_sha} ({branch})",
+                      "body": {"contentType": "HTML", "content": html_body},
+                      "toRecipients": [{"emailAddress": {"address": recipient}}],
+                  }
+              }).encode()
+
+              mail_req = urllib.request.Request(
+                  f"https://graph.microsoft.com/v1.0/users/{sender}/sendMail",
+                  data=email_payload,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Content-Type": "application/json",
+                  },
+                  method="POST",
+              )
+              with urllib.request.urlopen(mail_req, timeout=20) as r:
+                  print(f"Failure alert sent to {recipient} (HTTP {r.status})")
+          except Exception as e:
+              print(f"Warning: could not send failure alert email: {e}", file=sys.stderr)
+          PYEOF

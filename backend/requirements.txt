@@ -1,0 +1,92 @@
+# Mela AI - Backend Dependencies
+# Python 3.11+
+
+# FastAPI & Web
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+gunicorn>=22.0.0
+python-multipart>=0.0.26
+starlette>=0.47.2
+httpx>=0.28.1
+websockets>=13.0.0,<17.0.0
+
+# Database
+sqlalchemy==2.0.25
+aiosqlite==0.20.0
+aioodbc==0.5.0
+pyodbc==5.1.0
+alembic==1.13.1
+
+# Azure Services
+azure-identity>=1.16.1
+azure-storage-blob>=12.19.0
+azure-search-documents==11.4.0
+azure-ai-documentintelligence==1.0.0b2
+azure-cognitiveservices-speech==1.35.0
+azure-keyvault-secrets==4.7.0
+azure-monitor-opentelemetry==1.2.0
+opencensus-ext-azure==1.1.13
+azure-cosmos==4.5.1
+azure-communication-email>=1.0.0,<2.0.0
+
+# Phase 1: optional Redis client (no-op when REDIS_URL is unset)
+redis>=5.0,<6
+fakeredis[aioredis]>=2.0
+
+# OpenAI
+openai>=1.52.0,<2.0.0
+tiktoken==0.6.0
+
+# Anthropic Claude (limited preview)
+anthropic>=0.85.0
+
+# Google Gemini (free-tier, Google AI Studio)
+google-genai>=1.0.0
+
+# Authentication
+python-jose[cryptography]>=3.4.0
+PyJWT>=2.12.0
+cryptography>=46.0.6
+msal>=1.26.0
+# Phase 6A: bcrypt for hashing MCP client API keys.  Plaintext is
+# returned exactly once on creation; only the hash is persisted.
+bcrypt>=4.0.0
+
+# Data Processing
+pydantic>=2.9.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+email-validator==2.1.0
+python-dotenv==1.2.2
+
+# Document Processing
+PyMuPDF==1.23.22
+python-docx==1.1.0
+python-pptx==0.6.23
+openpyxl==3.1.2
+Pillow>=10.3.0
+
+# Data Science & Code Interpreter
+pandas>=2.2.1
+numpy>=1.22.4
+matplotlib>=3.8.3
+seaborn>=0.13.2
+scipy>=1.12.0
+fpdf2==2.7.9
+xlsxwriter==3.2.0
+
+# Utilities
+python-dateutil==2.8.2
+aiofiles==23.2.1
+tenacity==8.2.3
+ddgs>=1.0.0
+
+# Testing
+pytest>=9.0.3
+pytest-asyncio>=0.25.3
+pytest-cov>=4.1.0
+
+# Development
+black>=26.3.1
+isort==5.13.2
+flake8==7.0.0
+mypy==1.8.0

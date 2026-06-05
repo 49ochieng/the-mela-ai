@@ -1,0 +1,354 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Armely Brand Colors */
+    --primary: 221 57% 39%; /* #2f5597 */
+    --primary-foreground: 0 0% 100%;
+    
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 57% 39%;
+    
+    --radius: 0.5rem;
+    
+    /* Chat specific */
+    --chat-user-bg: 221 57% 39%;
+    --chat-assistant-bg: 210 40% 96%;
+    --sidebar-width: 280px;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    
+    --card: 224 47% 15%;
+    --card-foreground: 210 40% 98%;
+    
+    --popover: 224 47% 15%;
+    --popover-foreground: 210 40% 98%;
+    
+    --primary: 221 57% 50%; /* Slightly lighter for dark mode */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 217 33% 25%;
+    --input: 217 33% 25%;
+    --ring: 221 57% 50%;
+    
+    --chat-user-bg: 221 57% 45%;
+    --chat-assistant-bg: 217 33% 17%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Chat message animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Streaming cursor */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.streaming-cursor::after {
+  content: '▋';
+  animation: blink 1s infinite;
+  color: hsl(var(--primary));
+}
+
+/* Code highlighting overrides */
+pre {
+  @apply rounded-lg p-4 overflow-x-auto;
+}
+
+code {
+  @apply text-sm;
+}
+
+/* Markdown styles */
+.prose {
+  @apply max-w-none;
+}
+
+.prose pre {
+  @apply bg-muted text-foreground;
+}
+
+.prose code {
+  @apply bg-muted px-1 py-0.5 rounded text-sm before:content-none after:content-none;
+}
+
+.prose a {
+  @apply text-primary hover:underline;
+}
+
+.prose ul {
+  @apply list-disc pl-6;
+}
+
+.prose ol {
+  @apply list-decimal pl-6;
+}
+
+/* ── Unified chat typography ──────────────────────────────────────────────────
+   Applied to ALL model output bubbles via .chat-content.
+   Overrides tailwind prose defaults so GPT, Claude, DeepSeek, Mistral, etc.
+   all render with the same visual rhythm.
+─────────────────────────────────────────────────────────────────────────────── */
+.chat-content {
+  font-size: 0.875rem;    /* 14px — compact, professional */
+  line-height: 1.65;
+  color: inherit;
+  word-break: break-words;
+  overflow-wrap: break-word;
+}
+
+/* Headings — scale keeps hierarchy without dominating body text */
+.chat-content h1 { font-size: 1.35em; font-weight: 700; margin: 1em 0 0.4em; line-height: 1.3; }
+.chat-content h2 { font-size: 1.2em;  font-weight: 700; margin: 0.9em 0 0.35em; line-height: 1.35; }
+.chat-content h3 { font-size: 1.07em; font-weight: 600; margin: 0.8em 0 0.3em;  line-height: 1.4; }
+.chat-content h4 { font-size: 1em;    font-weight: 600; margin: 0.7em 0 0.25em; }
+.chat-content h5,
+.chat-content h6 { font-size: 0.95em; font-weight: 600; margin: 0.6em 0 0.2em; }
+
+/* First heading at top gets no top margin */
+.chat-content > :first-child { margin-top: 0; }
+.chat-content > :last-child  { margin-bottom: 0; }
+
+/* Paragraphs */
+.chat-content p { margin: 0 0 0.65em; }
+.chat-content p:last-child { margin-bottom: 0; }
+
+/* Lists */
+.chat-content ul { list-style-type: disc;    padding-left: 1.5em; margin: 0.4em 0 0.65em; }
+.chat-content ol { list-style-type: decimal; padding-left: 1.5em; margin: 0.4em 0 0.65em; }
+.chat-content li { margin-bottom: 0.3em; }
+.chat-content li > p { margin: 0; }
+.chat-content ul ul,
+.chat-content ol ol,
+.chat-content ul ol,
+.chat-content ol ul { margin: 0.25em 0 0.25em 0; }
+
+/* Horizontal rule */
+.chat-content hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 1em 0; }
+
+/* Blockquote */
+.chat-content blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.4);
+  padding: 0.4em 0.9em;
+  margin: 0.6em 0;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* Strong / em */
+.chat-content strong { font-weight: 700; color: inherit; }
+.chat-content em     { font-style: italic; }
+
+/* Inline code */
+.chat-content :not(pre) > code {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.83em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  word-break: break-all;
+}
+
+/* Invert inline code inside blue user bubbles */
+.chat-content.chat-content-user :not(pre) > code {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+/* Code blocks */
+.chat-content pre {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 0;
+  margin: 0.6em 0;
+  overflow: hidden;
+  font-size: 0.82em;
+}
+
+/* Tables */
+.chat-content table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.88em;
+  margin: 0.6em 0;
+}
+.chat-content th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+  text-align: left;
+  padding: 0.45em 0.75em;
+  border: 1px solid hsl(var(--border));
+}
+.chat-content td {
+  padding: 0.4em 0.75em;
+  border: 1px solid hsl(var(--border));
+}
+.chat-content tr:nth-child(even) td {
+  background: hsl(var(--muted) / 0.4);
+}
+
+/* Links */
+.chat-content a {
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+.chat-content a:hover { text-decoration: underline; }
+
+/* Images in chat responses */
+.chat-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.4em 0;
+}
+
+/* ── Responsive chat message pane width ─────────────────────────────────────
+   Expands progressively on larger screens.
+   max-w-4xl  (≤1279px)  = 56rem / 896px
+   max-w-5xl  (1280-1535px) = 64rem / 1024px
+   max-w-6xl  (≥1536px)  = 72rem / 1152px
+   Always has 1rem padding so it never touches viewport edges.
+─────────────────────────────────────────────────────────────────────────────── */
+.chat-messages-pane {
+  width: 100%;
+  max-width: min(56rem, calc(100% - 2rem));
+  padding-left: 0;
+  padding-right: 0;
+}
+@media (min-width: 1280px) {
+  .chat-messages-pane {
+    max-width: min(64rem, calc(100% - 3rem));
+  }
+}
+@media (min-width: 1536px) {
+  .chat-messages-pane {
+    max-width: min(72rem, calc(100% - 4rem));
+  }
+}
+
+/* Voice mode overlay */
+.voice-mode-active {
+  @apply fixed inset-0 bg-background/95 z-50 flex items-center justify-center;
+}
+
+/* File upload drag overlay */
+.file-drop-active {
+  @apply border-2 border-dashed border-primary bg-primary/10;
+}
+
+/* Sidebar transitions */
+.sidebar-collapsed {
+  width: 0;
+  overflow: hidden;
+}
+
+.sidebar-expanded {
+  width: var(--sidebar-width);
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full border-2 border-muted border-t-primary;
+}
+
+/* Focus styles */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+}
+
+/* Button hover effects */
+.btn-hover {
+  @apply transition-all duration-200 hover:shadow-md active:scale-95;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-200 hover:shadow-lg hover:border-primary/20;
+}

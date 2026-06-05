@@ -1,0 +1,1 @@
+"""Mela AI - Backend Application"""
