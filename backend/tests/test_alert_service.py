@@ -19,6 +19,15 @@ from app.services.alert_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_db_persist():
+    """Keep these unit tests DB-free — patch out AlertEvent persistence."""
+    with patch(
+        "app.services.alert_service._persist_alert_event", AsyncMock()
+    ):
+        yield
+
+
 def _incident(**kw) -> AlertIncident:
     base = dict(
         title="x", severity="critical", code="TEST_CODE",

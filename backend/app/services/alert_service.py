@@ -265,6 +265,37 @@ async def _send_teams(incident: AlertIncident) -> bool:
 
 # ── Dead-letter fallback ──────────────────────────────────────
 
+async def _persist_alert_event(
+    incident: AlertIncident, channels_attempted: dict
+) -> None:
+    """Record one AlertEvent row per fired alert (best-effort).
+
+    This is what makes the admin alert history / ``alert_events`` table
+    populate.  Never raises — a persistence failure must not affect alert
+    delivery.  Patched out in unit tests so they stay DB-free.
+    """
+    try:
+        from app.core.database import async_session_maker
+        from app.models.models import AlertEvent
+        async with async_session_maker() as db:
+            db.add(AlertEvent(
+                incident_id=incident.id,
+                severity=incident.severity,
+                code=incident.code,
+                title=(incident.title or "")[:300],
+                route=incident.route,
+                tenant_id=incident.tenant_id,
+                channels_attempted=channels_attempted,
+                ai_triage_confidence=(
+                    incident.ai_triage.confidence if incident.ai_triage else None
+                ),
+            ))
+            await db.commit()
+        logger.info("alert event persisted: incident=%s", incident.id)
+    except Exception as exc:  # noqa: BLE001 — persistence must not break delivery
+        logger.warning("alert event persistence failed: %s", exc)
+
+
 def _write_deadletter(incident: AlertIncident) -> None:
     try:
         record = asdict(incident)
@@ -308,6 +339,12 @@ async def send_alert(incident: AlertIncident) -> None:
             logger.warning("email failed — emergency Teams fallback: %s", incident.id)
             teams_ok = await _send_teams(incident)
             _track("teams", "fallback", incident.id)
+
+        # Persist the dispatch record so the admin alert history /
+        # alert_events table reflects every fired alert. Best-effort.
+        await _persist_alert_event(
+            incident, {"email": email_ok, "teams": teams_ok}
+        )
 
         if not email_ok and not teams_ok:
             _write_deadletter(incident)
