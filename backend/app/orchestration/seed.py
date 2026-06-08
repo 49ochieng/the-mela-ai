@@ -196,6 +196,75 @@ _TASK_RADAR_CAPABILITIES: list[Capability] = [
         is_async=False,
         estimated_ms=400,
     ),
+    Capability(
+        name="create_followup_tasks",
+        description=(
+            "Create one or more Microsoft Planner follow-up tasks for the "
+            "user's team. Runs asynchronously: Task Radar creates each task "
+            "via the Microsoft Graph API and reports the created task IDs / "
+            "titles back to Mela via the ingestion callback."
+        ),
+        input_params={
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string"},
+                "tenant_id": {"type": "string"},
+                "items": {
+                    "type": "array",
+                    "description": "The follow-up tasks to create.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Task title (required).",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Optional task details / notes.",
+                            },
+                            "due_date": {
+                                "type": "string",
+                                "description": (
+                                    "Optional due date, ISO-8601 "
+                                    "(e.g. 2026-06-20 or 2026-06-20T17:00:00Z)."
+                                ),
+                            },
+                            "assignee_email": {
+                                "type": "string",
+                                "description": (
+                                    "Optional email of the person to assign "
+                                    "the task to."
+                                ),
+                            },
+                        },
+                        "required": ["title"],
+                    },
+                },
+                "plan_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional Planner plan ID. Falls back to Task "
+                        "Radar's configured default plan when omitted."
+                    ),
+                },
+                "bucket_id": {
+                    "type": "string",
+                    "description": "Optional Planner bucket ID within the plan.",
+                },
+            },
+            "required": ["user_id", "tenant_id", "items"],
+        },
+        output_shape={
+            "type": "object",
+            "properties": {
+                "created_count": {"type": "integer"},
+                "created_tasks": {"type": "array"},
+            },
+        },
+        is_async=True,
+        estimated_ms=2000,
+    ),
 ]
 
 
