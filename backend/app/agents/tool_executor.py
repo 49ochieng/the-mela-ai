@@ -908,8 +908,16 @@ class ToolExecutor:
         input_files: Optional[List[Dict]] = None,
         user_session: Optional[UserSession] = None,
         trace_id: Optional[str] = None,
+        on_progress: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Execute a tool and return result."""
+        """Execute a tool and return result.
+
+        ``trace_id`` ties this tool call to the originating chat request's
+        correlation ID so worker dispatches share one trace.  ``on_progress``
+        is an async callback ``(MelaTask, Optional[MelaResult], phase)`` the
+        orchestration executor invokes for worker (``worker__*``) tools — it
+        lets the chat layer stream live dispatch events to the UI.
+        """
         logger.info("Executing tool: %s user=%s", tool_name, getattr(user, "id", "?"))
 
         # ── Phase 3c (CR-3): strip LLM-supplied workflow_type ────────────────
@@ -1042,6 +1050,7 @@ class ToolExecutor:
                     input_files=input_files,
                     user_session=user_session,
                     trace_id=trace_id,
+                    on_progress=on_progress,
                 )
         except Exception as e:
             logger.error("Tool execution error for %s: %s", tool_name, e, exc_info=True)
@@ -1067,6 +1076,7 @@ class ToolExecutor:
         input_files: Optional[List[Dict]] = None,
         user_session: Optional[UserSession] = None,
         trace_id: Optional[str] = None,
+        on_progress: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Internal dispatch (no audit). Caller wraps in audit shim."""
         if user_session and user_session.is_personal:
@@ -1091,6 +1101,7 @@ class ToolExecutor:
                     tenant_id=getattr(user, "tenant_id", None),
                     trace_id=trace_id or str(uuid.uuid4()),
                     project_id=None,
+                    on_progress=on_progress,
                 )
             if out is None:
                 return {"error": f"Unknown worker tool: {tool_name}"}

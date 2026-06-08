@@ -1766,14 +1766,55 @@ class ChatService:
                         type="tool_executing",
                         data={"name": tc["name"], "round": _tool_round},
                     )
+                    # Buffer worker-progress events emitted by the executor's
+                    # on_progress callback so they can be yielded into the chat
+                    # SSE stream right after the await — a running generator
+                    # can't be yielded into from a foreign call stack. Only
+                    # worker__* tools drive this; built-ins leave it empty.
+                    _worker_progress: list[StreamChunk] = []
+
+                    async def _on_worker_progress(
+                        _task, _mela_result, _phase,
+                        _buf=_worker_progress, _name=tc["name"],
+                    ) -> None:
+                        try:
+                            from app.schemas.chat import (
+                                WorkerEventChunk,
+                                WorkerEventType,
+                            )
+                            _worker_id = getattr(_task, "worker_id", _name)
+                            _cap = getattr(_task, "capability", "")
+                            _buf.append(StreamChunk(
+                                type="worker_event",
+                                data=WorkerEventChunk(
+                                    worker_id=_worker_id,
+                                    event_type=WorkerEventType.TASK_UPDATED,
+                                    title=f"{_worker_id}: {_cap}",
+                                    summary=(
+                                        "Dispatching to worker…"
+                                        if _phase == "started"
+                                        else "Worker accepted the task"
+                                    ),
+                                    trace_id=getattr(_task, "trace_id", _corr_id),
+                                ).model_dump(mode="json"),
+                            ))
+                        except Exception:
+                            pass
+
                     try:
                         result = await tool_executor.execute_tool(
                             tc["name"], tc["arguments"], user,
                             access_token=access_token,
                             input_files=code_input_files if tc["name"] == "run_python_code" else None,
                             user_session=_user_session,
+                            trace_id=_corr_id,
+                            on_progress=_on_worker_progress,
                         )
                         tool_results_map[tc["id"]] = result
+
+                        # Surface any worker dispatch events into the chat SSE.
+                        for _evt in _worker_progress:
+                            yield _evt
 
                         # Phase 3a (CR-3): if the confirmation gate blocked
                         # this dispatch, surface a dedicated chunk to the
