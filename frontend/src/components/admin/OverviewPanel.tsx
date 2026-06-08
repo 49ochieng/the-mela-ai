@@ -52,7 +52,16 @@ export default function OverviewPanel() {
 
   return (
     <div className="p-6 space-y-6">
-      <h2 className="text-xl font-semibold text-gray-900">Overview</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-xl font-semibold text-gray-900">Overview</h2>
+        <span
+          title="All LLM inference and text embeddings run on Azure AI Foundry"
+          className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
+        >
+          <Zap size={12} />
+          Powered by Azure AI Foundry (Foundry IQ)
+        </span>
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard icon={Users} label="Total Users" value={users.total} sub={`${users.active} active`} color="blue" />
@@ -65,8 +74,9 @@ export default function OverviewPanel() {
 
       {model_health.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="font-medium text-gray-800">Model Activity (24h)</h3>
+            <span className="text-xs font-medium text-blue-600">Served via Azure AI Foundry</span>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50">

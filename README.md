@@ -6,6 +6,28 @@ Live: [armely-ai-web.azurewebsites.net](https://armely-ai-web.azurewebsites.net)
 
 ---
 
+## Microsoft IQ Integration
+
+**Foundry IQ.** All LLM inference and text embeddings run on **Azure AI
+Foundry** — it is the single backbone behind every model deployment. Models
+served via Foundry include **GPT-4.1**, **Kimi-K2.5**, **Mistral-Large-3**,
+**gpt-5.2-chat**, **Llama-4-Maverick**, and the **text-embedding-3-large**
+embedding model. The unified `AI_FOUNDRY_ENDPOINT` powers chat, Auto-Mode
+model selection, RAG embeddings, and the orchestration planner. The admin
+Overview panel and the in-chat model switcher surface this explicitly
+("Powered by Azure AI Foundry / Foundry IQ").
+
+**Work IQ.** Mela surfaces agent-generated work into the Microsoft 365 tools
+teams already use. The **Task Radar** worker creates follow-up tasks directly
+in **Microsoft Planner** via the **Microsoft Graph API**, and Mela's built-in
+Graph tools also write Planner / To-Do tasks, send mail, and schedule Teams
+meetings — so AI-produced action items land inside regulated teams' existing
+workflows rather than in a silo. Mela additionally exposes an inbound MCP
+server (`/mcp/v1`) and an embeddable `<mela-chat>` web component as further
+M365 surfaces.
+
+---
+
 ## Local development
 
 ### Prerequisites

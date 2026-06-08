@@ -397,17 +397,29 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     group: 'Recommended',
   };
 
+  // Models served by Azure AI Foundry (Foundry IQ). External providers
+  // (Google Gemini, Anthropic Claude) call out to their own APIs; everything
+  // else routes through our Azure AI Foundry deployments.
+  const _NON_FOUNDRY_GROUPS = ['Google', 'Anthropic'];
+  const _isFoundry = (group: string) => !_NON_FOUNDRY_GROUPS.includes(group);
+
   const modelOptions =
     models.length > 0
-      ? [_autoOption, ...models.map((m) => ({
-          value: m.id,
-          label: m.preview ? `${m.name} ⚗` : m.name,
-          description: m.preview
+      ? [_autoOption, ...models.map((m) => {
+          const group = MODEL_COMPANY[m.id] ?? 'Other';
+          const baseDesc = m.preview
             ? `${m.description} · ⚠ 3 req/min`
-            : m.description,
-          icon: <Sparkles className="h-4 w-4" />,
-          group: MODEL_COMPANY[m.id] ?? 'Other',
-        }))]
+            : m.description;
+          return {
+            value: m.id,
+            label: m.preview ? `${m.name} ⚗` : m.name,
+            description: _isFoundry(group)
+              ? `${baseDesc} · Azure AI Foundry`
+              : baseDesc,
+            icon: <Sparkles className="h-4 w-4" />,
+            group,
+          };
+        })]
       : [
           _autoOption,
           { value: 'gpt-5.2-chat',       label: 'GPT-5.2',              description: 'Next-gen frontier',                            icon: <Sparkles className="h-4 w-4" />, group: 'OpenAI' },
