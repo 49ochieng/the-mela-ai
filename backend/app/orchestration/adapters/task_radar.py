@@ -218,6 +218,12 @@ class MCPAdapter(WorkerAdapter):
         args: dict[str, Any] = dict(task.params or {})
         args["user_id"] = task.context.user_id
         args["tenant_id"] = task.context.tenant_id
+        # Correlation keys so an async worker can echo the EXACT task_id /
+        # trace_id back to /api/v1/ingest/result and resolve the pending
+        # task in-place (resolved_pending=True) instead of landing as a
+        # synthetic row.  Additive + ignored by workers that don't use them.
+        args["mela_task_id"] = task.task_id
+        args["trace_id"] = task.trace_id
         return args
 
     def _failure(

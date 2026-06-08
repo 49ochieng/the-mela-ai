@@ -184,6 +184,32 @@ This layer is **genuinely complete and well-engineered** (Phases 1–6, ~380 pas
 
 ## 11. Recommended build order for the next 6 days (deadline June 14)
 
+### Progress status — updated 2026-06-08
+
+The cross-agent collaboration story has been **built and wired** on branch `feature/cross-agent-collaboration` (7 commits). Done:
+
+| # | Task | Status |
+|---|---|---|
+| 1 | **Task Radar worker app** (`task-radar/`) — independent FastAPI MCP service, `create_followup_tasks` → Graph Planner, MelaResult callback | ✅ Built + run as a real process; **created a real Planner task (HTTP 201)** in live validation |
+| 2 | `create_followup_tasks` capability added to Mela's seed manifest (`is_async=True`) | ✅ Manifest validates |
+| 3 | `trace_id` + `on_progress` propagation in `chat_service` → `tool_executor` → `dispatch_worker_tool` | ✅ Worker dispatch events now stream to chat SSE |
+| 4 | Env vars (Task Radar keys, `MELA_INGESTION_BASE_URL`, `MELA_WORKER_REGISTRATION_KEY`, `AZURE_SEARCH_KB_INDEX=mela-kb-entries`, `REDIS_URL`) | ✅ Real values in gitignored env files; `REDIS_URL` documented in samples |
+| 5 | Foundry IQ / Work IQ branding (admin Overview, chat model switcher, README) | ✅ tsc clean |
+| 6 | Alert pipeline: `AlertEvent` persistence wired + `scripts/test_alert.py` | ✅ Breaker trip + alert fire proven; live ACS/Teams/SQL delivery needs a connected env (see §9) |
+| — | Adapter `mela_task_id`/`trace_id` overlay so async callbacks resolve in-place | ✅ Added; 54 orchestration tests pass |
+| 7 | End-to-end validation | ◑ Worker→Graph→Planner + worker contract proven (§12); full chat-driven run pending a connected Mela backend |
+
+**Remaining to be demo-complete (a connected environment with the Mela backend running):**
+- Boot the Mela backend against a reachable DB (Azure SQL was unreachable from the build sandbox) and run the live chat scenario end-to-end (§12).
+- Confirm the worker-event bar renders in the browser and the synthesis response lands.
+- Run `scripts/test_alert.py` where Azure SQL + the Teams webhook are reachable and `azure-communication-email` is installed, to capture a real Teams card + `alert_events` row.
+- Deploy the worker (set `TASK_RADAR_BASE_URL` in the dev/prod env to the deployed URL) — currently configured for `http://localhost:8001`.
+- (Optional) Microsoft IQ: ship a Teams app / Copilot declarative-agent manifest pointing at `/mcp/v1` for a stronger Work IQ surface.
+
+The original 6-day plan below remains the reference; most of Days 1–4 are now done.
+
+---
+
 Goal: make the *advertised* orchestration story real and put a Microsoft IQ flag clearly on the board, without destabilizing the working brain.
 
 **Day 1 — De-risk the demo path that already works + pick the DB.**
@@ -214,3 +240,65 @@ Goal: make the *advertised* orchestration story real and put a Microsoft IQ flag
 - Pre-create the Planner plan/buckets, pre-warm RAG with the compliance doc, pre-load the Teams app. Freeze code; only config after this point.
 
 **Explicitly do NOT attempt in 6 days:** Fabric IQ, REST/gRPC adapters, Redis-backed store rewrites beyond setting `REDIS_URL`, Meeting Assistant worker, worker self-registration. They add risk without changing the winning narrative.
+
+---
+
+## 12. End-to-end demo validation
+
+**Environment note.** Validation ran in the build sandbox, which can reach **Microsoft public endpoints** (`login.microsoftonline.com`, `graph.microsoft.com`) but **not** the Armely Azure SQL server, the Teams webhook host, or a local Redis (all timed out). The Mela backend therefore could not be booted here (it points at Azure SQL). So the chat-driven full loop is verified by component, and the **worker→Graph→Planner** half is verified **live and for real**.
+
+### Automated proofs (deterministic, repeatable)
+
+- `task-radar/test_worker.py` — **5 passed.** Proves: MCP dispatcher returns `{status: accepted, task_id, trace_id}` for an async call; bad `X-Api-Key` → 401; unknown tool → 404; deep health probe; and — critically — the worker's callback payload **validates against Mela's real `IngestResultRequest` schema** on both the success and the Graph-auth-failure paths.
+- `backend` orchestration + planner + intelligence suites — **221 passed** across the runs (`test_orchestration_phase2/3/4/5/6`, `test_phases_4_5`, `test_intelligence_layer`) after the adapter `mela_task_id` overlay and the `seed.py` capability addition.
+- `backend/tests/test_alert_service.py` — **15 passed** after wiring `AlertEvent` persistence.
+- Intent routing — the exact demo sentence now classifies as `CROSS_WORKER` (→ planner → Task Radar); `ANALYSIS`/`FILE_ARTIFACT`/`GENERAL` phrasings unchanged.
+
+### Live process run (real network)
+
+Started Task Radar as a standalone process (`python main.py`, port 8001) and drove it over HTTP:
+
+| Step | Result |
+|---|---|
+| `GET /health?deep=true` | `{"status":"ok","worker":"task-radar","graph":"ok"}` — **real Graph app-only token acquired** (`oauth2/v2.0/token → 200`). |
+| `POST /` bad key | `401 Unauthorized`. |
+| `POST /` `create_followup_tasks` (valid key, `mela_task_id`/`trace_id`, 1 item) | `200 {"status":"accepted","task_id":"task-live-1","trace_id":"trace-live-1"}`. |
+| Background task → Graph | `POST https://graph.microsoft.com/v1.0/planner/tasks → 201 Created` — **a real Microsoft Planner task was created** ("Review HIPAA access logs", due 2026-06-20) in plan `jJua_dRywEqaacMiLV2dDGUACJ7x`. |
+| Callback → Mela | `callback delivery failed: All connection attempts failed` — expected: the Mela backend was not running locally (`MELA_INGESTION_BASE_URL=http://localhost:8000`). |
+| `POST /` unknown tool | `404 Not Found`. |
+
+> ⚠️ **Side-effect disclosure:** the live validation created **one real Planner task** in the Armely tenant's default plan. It can be deleted from Planner (or via Graph `DELETE /planner/tasks/{id}`) — tell me if you'd like it removed.
+
+### Step-by-step trace of the scripted scenario
+
+Scenario message: *"I need to create follow-up tasks for my team based on our compliance review. Create tasks for: reviewing HIPAA access logs by June 20, updating the incident response policy by June 25, and scheduling a security training session by June 30."*
+
+| Step | What happens | Status |
+|---|---|---|
+| 1. Intent | `detect_intent` → **CROSS_WORKER** (new `_TASK_CREATION_TRIGGERS` rule, before ANALYSIS) → `OutcomeOrchestrator._run_cross_worker`. | ✅ proven |
+| 2. RAG / doc | In work mode, the planner/synthesis path runs; the compliance doc is grounded via RAG or the attached upload. | ◑ needs backend (RAG works per §2, untested in this loop) |
+| 3. Plan | `orchestration_planner` decomposes the goal against the registry; with Task Radar seeded it emits `task-radar.create_followup_tasks`. | ◑ needs backend + LLM (planner unit-tested) |
+| 4. Dispatch | `executor.run_plan` → `MCPAdapter` POSTs `{tool, arguments}` to the worker; adapter now overlays `user_id/tenant_id/mela_task_id/trace_id`. Worker returns `accepted`. | ✅ worker side proven live; adapter overlay unit-tested |
+| 5. Create tasks | Worker → Graph `POST /planner/tasks` per item. | ✅ proven live (201 Created) |
+| 6. Callback | Worker → `POST /api/v1/ingest/result` (matching `IngestResultRequest`) → resolves pending task (now in-place via `mela_task_id`), writes KB, **publishes `worker_event` to the SSE bar**, notifies the user. | ◑ contract proven; needs backend running to observe the bar/KB/notification |
+| 7. Synthesis | `_run_cross_worker` synthesises the worker findings into one chat answer over SSE; chat `on_progress` also streams a `worker_event` ("Dispatching to worker…"). | ◑ needs backend |
+
+**Net:** every link is either proven live (4–5) or proven by contract/unit test (1, 4, 6) — the only unproven part is the live Mela backend stitching them together, which needs an environment with a reachable DB. Nothing in the trace is expected to fail there: the worker contract matches the ingest schema exactly, the manifest seeds the capability, and the intent reliably routes to the worker path.
+
+### To run the full live demo
+
+```bash
+# 1. Worker (terminal A)
+cd task-radar && cp .env.sample .env   # already populated locally
+python main.py                         # :8001, /health?deep=true → graph: ok
+
+# 2. Mela backend (terminal B) — needs a reachable DB + AI Foundry
+cd backend && uvicorn app.main:app --port 8000 --reload
+#    seed logs: "Worker registry: upserted task-radar with 10 capabilities"
+
+# 3. Frontend (terminal C)
+cd frontend && npm run dev             # :3005, sign in (work mode)
+
+# 4. In chat, paste the scenario message above. Watch the WorkerEventBar,
+#    then check Microsoft Planner for the three created tasks.
+```

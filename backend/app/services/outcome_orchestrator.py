@@ -104,6 +104,21 @@ _DOMAIN_SETS: tuple[frozenset[str], ...] = (
 # CROSS_WORKER just because the message also mentions "today's meeting".
 _CONJUNCTIONS = (" and ", " plus ", " as well as ", "; ", ", and ")
 
+# Explicit task-creation / delegation phrasing.  These route through the
+# orchestration planner (CROSS_WORKER) so the request reaches the Task Radar
+# worker's ``create_followup_tasks`` capability rather than only the built-in
+# Graph tool.  Falls through silently to the standard chat path when no task
+# worker is registered (e.g. personal mode, or Task Radar unconfigured), so
+# adding these is safe.
+_TASK_CREATION_TRIGGERS = (
+    "follow-up task", "follow up task", "followup task", "follow-up tasks",
+    "follow up tasks", "followup tasks",
+    "create task", "create tasks", "create a task", "create follow",
+    "add a task", "add tasks", "assign tasks", "assign a task",
+    "action item", "action items", "planner task", "planner tasks",
+    "create to-do", "create todo",
+)
+
 
 def _hits_domains(text: str) -> int:
     """Count how many distinct domains the text mentions."""
@@ -118,6 +133,15 @@ def detect_intent(message: str) -> IntentType:
     # conjunction.  Checked first so "tasks AND meeting" doesn't fall
     # into ANALYSIS just because it contains "what".
     if any(c in lower for c in _CONJUNCTIONS) and _hits_domains(lower) >= 2:
+        return IntentType.CROSS_WORKER
+
+    # 0b. Explicit task-creation / delegation — route to the planner so the
+    # request reaches the Task Radar worker. Checked before ANALYSIS because
+    # phrasings like "create follow-up tasks based on our review" contain
+    # "review" and would otherwise be mis-classified as ANALYSIS. Falls
+    # through safely to the standard chat path when no task worker is
+    # registered.
+    if any(t in lower for t in _TASK_CREATION_TRIGGERS):
         return IntentType.CROSS_WORKER
 
     # 1. Strong multi-word file phrases
