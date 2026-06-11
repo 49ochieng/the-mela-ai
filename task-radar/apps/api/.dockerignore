@@ -1,0 +1,29 @@
+# API image hygiene — keep dev secrets, scratch state, and tooling
+# OUT of the production image.
+.env
+.env.*
+!.env.example
+*.log
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+storage/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+README.md
