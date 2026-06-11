@@ -1,0 +1,24 @@
+name: security-iac
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/security-iac.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+
+jobs:
+  checkov:
+    name: checkov (bicep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra/azure
+          framework: bicep
+          quiet: true
+          soft_fail: false

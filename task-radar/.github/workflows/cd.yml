@@ -1,0 +1,146 @@
+name: CD — Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SUBSCRIPTION_ID: 582b74e6-6cea-4329-8cb4-473b9653ae03
+  RESOURCE_GROUP: Mela-AI_CLIENT_APPS
+  NAME_PREFIX: melatr
+  ACR_LOGIN_SERVER: melatracr.azurecr.io
+
+jobs:
+  # ── Build & push container images ───────────────────────────
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name melatracr --subscription ${{ env.SUBSCRIPTION_ID }}
+
+      - name: Build & push API image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/melatr-api:latest \
+            ./apps/api
+          docker push ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/melatr-api:latest
+
+      - name: Build & push Web image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_API_URL=https://melatr-api.azurewebsites.net \
+            --build-arg NEXT_PUBLIC_MCP_URL=https://melatr-mcp.azurewebsites.net \
+            -t ${{ env.ACR_LOGIN_SERVER }}/melatr-web:${{ github.sha }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/melatr-web:latest \
+            ./apps/web
+          docker push ${{ env.ACR_LOGIN_SERVER }}/melatr-web:${{ github.sha }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/melatr-web:latest
+
+  # ── Deploy backend services ──────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend Services
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API container
+        run: |
+          az webapp config container set \
+            --name melatr-api \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }} \
+            --container-registry-url https://${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Deploy Worker container
+        run: |
+          az webapp config container set \
+            --name melatr-worker \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }} \
+            --container-registry-url https://${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Deploy Scheduler container
+        run: |
+          az webapp config container set \
+            --name melatr-sched \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }} \
+            --container-registry-url https://${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Deploy MCP container
+        run: |
+          az webapp config container set \
+            --name melatr-mcp \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name ${{ env.ACR_LOGIN_SERVER }}/melatr-api:${{ github.sha }} \
+            --container-registry-url https://${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Run database migrations
+        run: |
+          az webapp ssh --name melatr-api --resource-group ${{ env.RESOURCE_GROUP }} \
+            --command "cd /app && alembic upgrade head"
+
+      - name: Restart backend apps
+        run: |
+          az webapp restart --name melatr-api      --resource-group ${{ env.RESOURCE_GROUP }}
+          az webapp restart --name melatr-worker   --resource-group ${{ env.RESOURCE_GROUP }}
+          az webapp restart --name melatr-sched    --resource-group ${{ env.RESOURCE_GROUP }}
+          az webapp restart --name melatr-mcp      --resource-group ${{ env.RESOURCE_GROUP }}
+
+  # ── Deploy frontend ──────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Web container
+        run: |
+          az webapp config container set \
+            --name melatr-web \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name ${{ env.ACR_LOGIN_SERVER }}/melatr-web:${{ github.sha }} \
+            --container-registry-url https://${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Restart web app
+        run: |
+          az webapp restart --name melatr-web --resource-group ${{ env.RESOURCE_GROUP }}
