@@ -1,67 +1,105 @@
 # Mela Task Radar
 
-An **independent** MCP-over-HTTP worker app that Mela's orchestration brain
-dispatches work to. It runs as its own process (default port `8001`), separate
-from the Mela backend, and follows the cardinal rule from `ORCHESTRATION.md`:
-**Task Radar never depends on Mela to run.** If Mela is down, the worker keeps
-serving; its callbacks simply fail and are logged.
+AI-powered task intelligence for Microsoft 365. Scans Outlook + Teams, extracts
+actionable tasks with GPT-5.2, stores them in a central DB, and syncs to
+Excel + Planner. Exposes REST + MCP tools so Mela AI can drive it.
 
-## What it does
+## Repo layout
 
-Exposes one async capability today — **`create_followup_tasks`** — which:
+```
+mela-task-radar/
+  apps/
+    api/          # FastAPI backend (REST + MCP + workers + scheduler)
+    web/          # Next.js 14 frontend (App Router, TS, Tailwind)
+  infra/azure/    # Bicep templates
+  docs/           # Architecture, deployment, MCP, permissions, user guide
+  env/            # .env.dev (gitignored, real secrets)
+  .env.example
+  docker-compose.yml
+```
 
-1. Receives a list of work items (`title`, optional `description`, `due_date`,
-   `assignee_email`) plus an optional `plan_id` / `bucket_id`.
-2. Creates each item as a **Microsoft Planner task** via the Microsoft Graph
-   API using an app-only (client-credentials) token.
-3. POSTs a `MelaResult`-shaped callback to Mela's
-   `POST /api/v1/ingest/result` so the orchestration brain wakes, surfaces a
-   worker event in the chat UI, writes the Knowledge Base, and notifies the
-   user.
+## Quick start (local dev)
 
-It always returns one callback (`completed` / `partial` / `failed`) so Mela is
-never left awaiting.
+> **Authentication.** Sign-in uses **Microsoft Entra ID** with the **PKCE auth-code flow**. After a successful sign-in the API sets an **httpOnly session cookie** (`mtr_session`) and redirects to the web app's `/dashboard`. The frontend reads `/api/me` with `credentials: "include"` and gates protected routes via the `(app)` route group. Logout clears the cookie via `POST /api/auth/logout`.
 
-## Endpoints
+### 1. Backend
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/` | MCP dispatcher. Header `X-Api-Key: <TASK_RADAR_MCP_API_KEY>`. Body `{"tool": "create_followup_tasks", "arguments": {...}}`. Returns `{"status": "accepted", "task_id": ...}` immediately. |
-| `GET` | `/health?deep=true` | Liveness. `deep=true` also probes Graph connectivity. This is the URL Mela's registry health-checks. |
+```powershell
+cd apps/api
+python -m venv .venv ; .\.venv\Scripts\activate
+pip install -r requirements.txt
+copy ..\..\env\.env.local .env          # or maintain your own
+alembic upgrade head
+# Run on port 8012 to match the Microsoft redirect URI in env/.env.local.
+# Avoid --reload while debugging auth so the in-memory MSAL flow cache survives.
+uvicorn app.main:app --port 8012
+```
 
-## Run
+Optional separate processes:
+
+```powershell
+python -m app.mcp.server                # MCP server on :8090
+python -m app.scheduler.scheduler       # daily scan trigger
+# Worker runs in-process when QUEUE_PROVIDER=memory (the dev default).
+```
+
+### 2. Frontend
+
+```powershell
+cd apps/web
+npm install
+npm run dev                             # http://localhost:2005
+```
+
+Then open <http://localhost:2005>, click **Sign in with Microsoft 365**,
+and you'll be taken to the dashboard.
+
+### 3. Docker (everything together)
 
 ```bash
-cd task-radar
-python -m venv venv && source venv/Scripts/activate   # Windows
-pip install -r requirements.txt
-cp .env.sample .env        # fill in the values
-python main.py             # or: uvicorn main:app --host 0.0.0.0 --port 8001
+docker compose up --build
 ```
 
-Health check: <http://localhost:8001/health?deep=true>
+## Environment
 
-## Environment variables
+Copy `.env.example` to `.env` (root) or use the existing `env/.env.dev` as a
+template. See `docs/deployment-azure.md` for production secrets management
+(Key Vault).
 
-| Var | Purpose |
-|---|---|
-| `TASK_RADAR_MCP_API_KEY` | Key Mela presents inbound (`X-Api-Key`). Must match Mela's backend env. |
-| `TASK_RADAR_INBOUND_API_KEY` | Key this worker presents on callbacks (`X-Worker-Api-Key`). Must match Mela's `auth_config.inbound_api_key`. |
-| `TASK_RADAR_PLANNER_PLAN_ID` | Default Planner plan for task creation. |
-| `MELA_INGESTION_BASE_URL` | Mela backend base URL for the callback. |
-| `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID` | App-only Graph credentials (needs `Tasks.ReadWrite` app permission + admin consent). |
-| `PORT` | Listen port (default `8001`). |
+## MVP validation
 
-## How Mela reaches it
+- [docs/readiness-report.md](docs/readiness-report.md) — per-area audit of
+  what is production-ready vs. needs-real-credential-test.
+- [docs/manual-validation-checklist.md](docs/manual-validation-checklist.md)
+  — 12-step end-to-end walkthrough using real Microsoft 365 + Azure OpenAI.
 
-Set these in Mela's backend env so the worker is seeded into the registry:
+Run the test suite (37 tests, all passing):
 
-```
-TASK_RADAR_BASE_URL=http://localhost:8001
-TASK_RADAR_MCP_API_KEY=<same as worker>
-TASK_RADAR_INBOUND_API_KEY=<same as worker>
-MELA_INGESTION_BASE_URL=http://localhost:8000
+```bash
+cd apps/api
+.\.venv\Scripts\activate
+pytest
 ```
 
-Mela's `seed.py` then registers `task-radar` with the `create_followup_tasks`
-capability and its generic `MCPAdapter` dispatches to `POST /` here.
+## MVP scope
+
+In: Outlook scanning, GPT-5.2 extraction, Excel sync to OneDrive, Microsoft
+Planner sync, daily scheduler, MCP tools, dashboard UI.
+
+Phase 2 (flags off by default): Teams private-chat / channel scanning,
+real-time Graph webhooks, semantic dedup, Jira / ClickUp connectors,
+analytics dashboards.
+
+## Documentation
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/deployment-azure.md](docs/deployment-azure.md)
+- [docs/graph-permissions.md](docs/graph-permissions.md)
+- [docs/mcp-tools.md](docs/mcp-tools.md)
+- [docs/user-guide.md](docs/user-guide.md)
+
+## Success criteria
+
+See the master spec — all 18 success criteria are wired through the app.
+MVP exclusions (semantic dedupe, Teams private chat, Jira/ClickUp,
+realtime webhooks) are intentionally not built but their seams exist.
