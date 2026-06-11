@@ -1,322 +1,115 @@
-# Mela AI — Enterprise AI Assistant
+# Mela AI
 
-**FastAPI + Next.js 14** — Azure AI, SharePoint, OneDrive, Speech, DALL-E, and more.
+Mela AI is the control plane that makes enterprise AI deployable at scale. It governs what AI costs, it grounds answers in organizational knowledge, and it runs a background agent that recovers work people committed to but never tracked.
 
-Live: [armely-ai-web.azurewebsites.net](https://armely-ai-web.azurewebsites.net) | API health: [armely-ai-api.azurewebsites.net/health](https://armely-ai-api.azurewebsites.net/health)
+## The problem
 
----
+Organizations deploy AI across hundreds of users with no visibility into spend. Nobody can say who is consuming what, which models answer which requests, or whether an expensive model is doing work a cheap model could do. Token usage is invisible until the invoice arrives. Budgets drift, finance pushes back, and the rollout stalls.
 
-## Microsoft IQ Integration
+The default settings make this worse. A request that a free model could answer often goes to the most expensive model in the catalog. There is no per-user limit, no automatic downgrade as someone nears their budget, and no single screen where an administrator can see consumption across teams. The cost of one careless prompt and one careful prompt looks identical until month-end.
 
-**Foundry IQ.** All LLM inference and text embeddings run on **Azure AI
-Foundry** — it is the single backbone behind every model deployment. Models
-served via Foundry include **GPT-4.1**, **Kimi-K2.5**, **Mistral-Large-3**,
-**gpt-5.2-chat**, **Llama-4-Maverick**, and the **text-embedding-3-large**
-embedding model. The unified `AI_FOUNDRY_ENDPOINT` powers chat, Auto-Mode
-model selection, RAG embeddings, and the orchestration planner. The admin
-Overview panel and the in-chat model switcher surface this explicitly
-("Powered by Azure AI Foundry / Foundry IQ").
+Work has a second, quieter failure. Every day people commit to tasks inside Outlook threads and Teams messages. Those commitments are real, but they never become tracked tasks. They sit in a mailbox, get buried under newer mail, and drop. The work was discussed. It was agreed. It was never done.
 
-**Work IQ.** Mela surfaces agent-generated work into the Microsoft 365 tools
-teams already use. The **Task Radar** worker creates follow-up tasks directly
-in **Microsoft Planner** via the **Microsoft Graph API**, and Mela's built-in
-Graph tools also write Planner / To-Do tasks, send mail, and schedule Teams
-meetings — so AI-produced action items land inside regulated teams' existing
-workflows rather than in a silo. Mela additionally exposes an inbound MCP
-server (`/mcp/v1`) and an embeddable `<mela-chat>` web component as further
-M365 surfaces.
+## What Mela AI is
 
----
+Mela AI is a multi-tenant enterprise AI platform where administrators govern consumption through per-user token limits and live model pricing, employees reach organizational knowledge through a Work mode that activates Microsoft 365 connectors under per-tenant access control, and a separate background agent called Task Radar monitors the communication layer for work that was committed but never tracked, then turns it into Microsoft Planner tasks.
 
-## Local development
+## Three layers
 
-### Prerequisites
+**Governed consumption.** Every user has a daily token limit, defaulting to 100,000 tokens and 500,000 for administrators, enforced before each request. Live per-model pricing is read from the `model_quota_policies` table and shown to users, ranging from Gemini 2.0 Flash at 0.0000 USD per 1K tokens on the free tier and Grok-3-mini at 0.0003, up to Claude Opus 4.6 at 0.0150. As a user nears the cap, the router downgrades automatically: at 70 percent of budget it caps requests at GPT-4.1, and at 90 percent it forces GPT-4o-mini. Administrators control which models each tenant can access and watch monthly cost roll up per tenant and per model.
 
-| Tool | Version |
-|------|---------|
-| Python | 3.11+ |
-| Node.js | 20 LTS |
+**Work IQ.** Personal mode answers from the model alone. Work mode activates the Microsoft 365 connectors, so the agent can read Outlook, search SharePoint and OneDrive, check the calendar, and create Planner tasks through the Microsoft Graph API. Enterprise tools are blocked in Personal mode by an explicit deny list in the tool executor, so personal sessions cannot touch corporate data. Tenant isolation is enforced at Azure AI Search and again in post-processing, and agent memory stores personal and workspace documents for retrieval. This is the Work IQ layer.
 
-### 1. Configure env files
+**Background task intelligence.** Task Radar runs as a separate agent in its own process. It scans Outlook through the Microsoft Graph API, runs each message through a noise filter and a deduplication stage, then extracts action items with GPT-5.2 and returns structured tasks with a confidence score. Mela Brain queries Task Radar over MCP-over-HTTP and receives results through an asynchronous callback to its ingestion API, so a long scan never blocks the chat. The user watches the dispatch run in real time in the worker event bar above the chat input. Teams channel scanning is built behind a flag and ships off by default.
 
-```bash
-# Backend — copy sample and fill in values
-cp env/.env.dev.sample env/.env.local
+## Microsoft IQ integration
 
-# Frontend — copy sample and fill in values
-cp frontend/.env.example frontend/.env.local
-```
-
-Minimum required for local dev (SQLite, dev login):
-
-```env
-# backend env/.env.local
-JWT_SECRET_KEY=any-random-string-here
-AI_FOUNDRY_ENDPOINT=https://<your-resource>.cognitiveservices.azure.com
-AI_FOUNDRY_API_KEY=<your-key>
-DEV_USERNAME=dev
-DEV_PASSWORD=dev
-
-# frontend frontend/.env.local
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_ENABLE_DEV_LOGIN=true
-NEXT_PUBLIC_DEV_USERNAME=dev
-NEXT_PUBLIC_DEV_PASSWORD=dev
-```
-
-### 2. Start the backend
-
-```bash
-cd backend
-python -m venv venv
-source venv/Scripts/activate        # Windows
-# source venv/bin/activate          # Linux / macOS
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Backend health: <http://localhost:8000/health>
-
-### 3. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev      # http://localhost:3005
-```
-
----
-
-## Required environment variables
-
-### Backend
-
-| Variable | Required | Secret | Description |
-|----------|----------|--------|-------------|
-| `JWT_SECRET_KEY` | Yes | Yes | Token signing secret |
-| `AI_FOUNDRY_ENDPOINT` | Yes | No | Azure AI / OpenAI endpoint |
-| `AI_FOUNDRY_API_KEY` | Yes | Yes | Azure AI API key |
-| `AZURE_TENANT_ID` | For SSO | No | Azure AD tenant ID |
-| `AZURE_CLIENT_ID` | For SSO | No | App registration client ID |
-| `AZURE_CLIENT_SECRET` | For SSO | Yes | App registration secret |
-| `AZURE_SEARCH_ENDPOINT` | For RAG | No | Azure AI Search URL |
-| `AZURE_SEARCH_ADMIN_KEY` | For RAG | Yes | AI Search admin key |
-| `AZURE_SPEECH_KEY` | For voice | Yes | Speech service key |
-| `AZURE_SPEECH_REGION` | For voice | No | Speech region (default: `eastus`) |
-| `AZURE_DALLE_ENDPOINT` | For images | No | DALL-E endpoint |
-| `AZURE_DALLE_API_KEY` | For images | Yes | DALL-E API key |
-| `SHAREPOINT_SITES` | For RAG | No | Comma-separated SharePoint site URLs |
-| `ONEDRIVE_ROOT` | For RAG | No | OneDrive root URL |
-| `ORG_WEBSITE_ALLOWLIST` | For RAG | No | Domains to crawl (e.g. `armely.com`) |
-| `DATABASE_URL` | Prod only | Yes | Azure SQL connection string |
-| `DEV_USERNAME` / `DEV_PASSWORD` | Dev only | No/Yes | Dev login credentials |
-
-### Frontend
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NEXT_PUBLIC_API_URL` | Yes | Backend URL (e.g. `http://localhost:8000`) |
-| `NEXT_PUBLIC_AZURE_AD_CLIENT_ID` | For SSO | Azure AD client ID |
-| `NEXT_PUBLIC_AZURE_AD_TENANT_ID` | For SSO | Azure AD tenant ID |
-| `NEXT_PUBLIC_API_SCOPE` | For SSO | `api://<client-id>/access_as_user` |
-
----
-
-## Azure App Registration — required for Microsoft login
-
-Microsoft Entra ID (Azure AD) requires every redirect URI to be explicitly registered. If a URI is missing, login will fail with an `AADSTS50011` error.
-
-### Redirect URIs to register
-
-Go to: **Azure portal → App registrations → [your app] → Authentication → Web → Redirect URIs**
-
-| Environment | URI to add |
-|-------------|-----------|
-| Local dev | `http://localhost:3005` |
-| Production (current) | `https://armely-ai-web.azurewebsites.net` |
-| Production (future) | `https://mela.armely.com` |
-
-Add all three so switching domains does not break existing sessions.
-
-Also set **Front-channel logout URL** to `https://armely-ai-web.azurewebsites.net` (or your active production domain).
-
-### API scope (for backend token validation)
-
-Go to: **App registrations → [your app] → Expose an API**
-
-1. Set **Application ID URI** to `api://<client-id>`
-2. Add a scope named `access_as_user` — Admins and users: **enabled**
-
-The full scope string used in MSAL and the backend is: `api://<client-id>/access_as_user`
-
-### Required GitHub Variable for domain switch
-
-When switching to `https://mela.armely.com`:
-
-1. Add the new URI to the Azure App Registration (see table above)
-2. Set the GitHub Variable `FRONTEND_URL=https://mela.armely.com` in your repo
-3. Re-run the CD workflow — the new URL is baked into the Next.js build automatically
-
-> **No code changes needed.** The CD pipeline reads `vars.FRONTEND_URL` and falls back to the `.azurewebsites.net` URL until the variable is set.
-
----
-
-## Knowledge sources (production)
-
-| Source type | URL / Domain |
-|-------------|--------------|
-| SharePoint | `https://armely.sharepoint.com/sites/Test-team` |
-| SharePoint | `https://armely.sharepoint.com/ZapManufacturing` |
-| SharePoint | `https://armely.sharepoint.com/sites/LearningResources` |
-| SharePoint | `https://armely.sharepoint.com/sites/ArmelyLLC` |
-| OneDrive | `https://armely-my.sharepoint.com/` |
-| Website | `armely.com` (crawl depth 3) |
-
-All answers that depend on retrieved documents include citations. If retrieval returns nothing relevant, the assistant says so — it never fabricates sources.
-
----
-
-## Run tests
-
-### Backend
-
-```bash
-cd backend
-source venv/Scripts/activate
-pytest tests/ -v --tb=short
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm test               # unit tests (Jest)
-npm run test:coverage  # with coverage
-```
-
----
-
-## Lint and formatting
-
-### Backend
-
-```bash
-cd backend
-pip install ruff black
-ruff check app/          # lint — same rules as CI (E, F, W; ignores E501)
-black app/               # format
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run lint             # ESLint — same as CI (must pass)
-npx tsc --noEmit         # TypeScript type check — same as CI (must pass)
-npx prettier --write .   # format
-```
-
-CI fails if lint, type-check, or tests fail.
-
----
-
-## Deployment
-
-### CI (every PR and push except main)
-
-`.github/workflows/ci.yml` runs:
-
-1. Python lint (`ruff`) — **blocking**
-2. Python tests (`pytest`) — **blocking**
-3. Next.js lint + type check — **blocking**
-4. Next.js build
-5. Security scan (Gitleaks)
-
-### CD (push to `main` or manual dispatch)
-
-`.github/workflows/cd.yml` runs:
-
-1. Build backend ZIP + frontend standalone ZIP
-2. Provision infrastructure via Bicep (`infra/main.bicep`)
-3. Write secrets to Azure Key Vault
-4. Deploy backend via Kudu ZipDeploy (with SCM retry)
-5. Deploy frontend via Azure OneDeploy
-6. Health check gate — fails workflow if backend does not return HTTP 200
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|--------|-------------|
-| `JWT_SECRET_KEY` | JWT signing secret |
-| `AZURE_CLIENT_SECRET` | Azure AD client secret |
-| `AI_FOUNDRY_API_KEY` | Azure AI API key |
-| `AZURE_SPEECH_KEY` | Speech service key |
-| `AZURE_DALLE_API_KEY` | DALL-E API key |
-| `AZURE_SEARCH_ADMIN_KEY` | AI Search admin key |
-| `AZURE_STORAGE_ACCOUNT_KEY` | Storage key |
-| `DATABASE_URL` | Azure SQL connection string |
-| `DEV_PASSWORD` | Dev login password |
-
-### Required GitHub Variables
-
-| Variable | Description |
-|----------|-------------|
-| `AZURE_CLIENT_ID` | Azure AD client ID (OIDC federated) |
-| `AZURE_TENANT_ID` | Azure AD tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Subscription ID |
-| `AZURE_AD_CLIENT_ID` | App registration client ID |
-| `AI_FOUNDRY_ENDPOINT` | Azure AI Foundry endpoint |
-| `FRONTEND_URL` | *(optional)* Override frontend URL — e.g. `https://mela.armely.com`. Defaults to `https://armely-ai-web.azurewebsites.net` |
-| `NEXT_PUBLIC_API_SCOPE` | `api://<client-id>/access_as_user` |
-| `DEV_USERNAME` | Dev login username (default: `dev`) |
-
----
-
-## Secrets management
-
-```
-Local dev    → env/.env.local         (gitignored, never committed)
-GitHub CI    → Repository Secrets     (encrypted)
-                  ↓ cd.yml writes to Key Vault post-Bicep
-Azure KV     → kv-mela-mcpp           (Azure-managed)
-                  ↓ App Setting KV reference
-App Service  → injected as env var    (resolved at runtime)
-```
-
----
+| IQ surface | What it does | Where it lives |
+|---|---|---|
+| **Foundry IQ** | All LLM inference and text embeddings run through Azure AI Foundry. The named Foundry deployments are Kimi-K2.5, Mistral-Large-3, gpt-5.2-chat, gpt-4.1, grok-3-mini, Llama-4-Maverick, and the text-embedding-3-large embedding model. The model router serves these with silent cross-provider failover: when a provider errors before producing any content, the router switches to the next provider and the user still gets an answer. | Config keys `AI_FOUNDRY_ENDPOINT`, `AI_FOUNDRY_API_KEY`, `AI_FOUNDRY_API_VERSION`, and the `DEPLOYMENT_*` deployment names in `backend/app/core/config.py`. Router in `backend/app/services/model_router.py`. |
+| **Work IQ** | Task Radar reads from Outlook and Teams as Work IQ sources. Mela Brain writes back to Work IQ outputs: it creates and updates Microsoft Planner tasks, creates Teams online meetings, sends mail, and books calendar events through Graph. It also sends operational alerts to Teams through an incoming webhook. The admin panel is the governance surface for this layer. | Graph capabilities in `backend/app/services/graph_service.py`. Admin panels in `frontend/src/components/admin/`. |
 
 ## Architecture
 
-```
-frontend (Next.js 14, port 3005)
-  │  SSE streaming / REST API
-  ▼
-backend (FastAPI, port 8000)
-  ├── chat_service.py          — orchestration, tool dispatch, RAG
-  ├── openai_service.py        — Azure OpenAI / AI Foundry, retry + model fallback
-  ├── search/
-  │   ├── query_pipeline.py    — hybrid search, ACL filter, SourceRecord citation schema
-  │   └── index_manager.py     — Azure AI Search index lifecycle
-  ├── connectors/
-  │   ├── sharepoint.py        — Graph delta sync (4 SharePoint sites)
-  │   ├── onedrive.py          — user OneDrive (delegated token)
-  │   └── org_website.py       — armely.com crawler
-  ├── speech_service.py        — Azure Speech STT + TTS (with citation text cleanup)
-  ├── dalle_service.py         — DALL-E 3 image generation
-  └── code_interpreter_service.py — Python sandbox, returns xlsx/docx/pdf/csv
-```
+![Mela AI architecture](docs/architecture-diagram.svg)
 
----
+Mela runs as two independent applications. Mela Brain is the FastAPI platform that serves chat, governance, Work IQ, and the orchestration brain. Task Radar is a separate FastAPI and Next.js application that scans mail and creates tasks. The two communicate only through MCP-over-HTTP, and Task Radar never imports Mela code, so if Mela goes down Task Radar keeps running and if Task Radar goes down Mela degrades to its built-in tools.
 
-## View logs
+Reliability is built into the dispatch path. Each worker sits behind a per-worker circuit breaker that trips to open after repeated failures and fails fast instead of hanging the request. Asynchronous results return through a callback to the ingestion API rather than a held connection, the chat streams to the browser over Server-Sent Events with a 30-second heartbeat to survive the Azure App Service timeout, and when a worker dispatch fails the alert service generates an AI triage summary and posts it to Teams as an Adaptive Card.
 
+## Key features
+
+Per-user daily token limits enforced before each request, with admin and standard tiers.
+Live per-model pricing shown to users and editable in the Model Governance panel.
+Budget-aware model downgrade that drops to a cheaper tier as a user nears the limit.
+Silent cross-provider failover across Azure OpenAI, Anthropic, and Google providers.
+Personal mode and Work mode, with enterprise tools denied in Personal mode.
+Work IQ connectors for Outlook, SharePoint, OneDrive, calendar, and Planner over Microsoft Graph.
+Per-tenant access control on workers, enforced in the tool list and again at the router.
+Task Radar background agent with 10 MCP capabilities, including asynchronous Planner follow-up creation.
+Agent memory for personal and workspace documents, usable as inputs to the code interpreter.
+Code interpreter that runs sandboxed Python and returns downloadable files, charts, and reports.
+Audit logging on every mutating tool call, with secret redaction and bounded argument size.
+Onboarding automation that sends a welcome mail, schedules orientation, and creates Planner tasks.
+Embed surface that exposes Mela as a `<mela-chat>` web component and an inbound MCP server.
+Eighteen built-in agent tools spanning mail, calendar, tasks, enterprise search, and code execution.
+
+## Getting started
+
+### Prerequisites
+- Python 3.11 or newer, Node.js 18 or newer.
+- Azure access for Azure AI Foundry or Azure OpenAI, Azure AI Search, an Entra app registration with Microsoft Graph permissions, and either Azure SQL or local SQLite for development.
+
+### 1. Clone
 ```bash
-# Backend logs (Azure)
-az webapp log tail -n armely-ai-api -g EdgarO_RG_MCPP_WU2
-
-# Frontend logs (Azure)
-az webapp log tail -n armely-ai-web -g EdgarO_RG_MCPP_WU2
-
-# Local backend log
-tail -f /tmp/backend.log
+git clone https://github.com/49ochieng/the-mela-ai.git
+cd the-mela-ai
 ```
+
+### 2. Backend (Mela Brain)
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                               # then fill in the values below
+alembic upgrade head
+uvicorn app.main:app --port 8000
+```
+
+### 3. Task Radar
+```bash
+cd task-radar/apps/api
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp ../../.env.example .env
+alembic upgrade head
+uvicorn app.main:app --port 8001
+```
+
+### 4. Frontend
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+### Required environment variables
+- `AI_FOUNDRY_ENDPOINT`, `AI_FOUNDRY_API_KEY`, `AI_FOUNDRY_API_VERSION`: Azure AI Foundry endpoint and key for model inference and embeddings.
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`: Azure OpenAI backbone, used when distinct from Foundry.
+- `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_API_KEY`: Azure AI Search for RAG and tenant-scoped knowledge.
+- `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`: Entra app for app-only Microsoft Graph calls.
+- `ENTRA_AUTH_CLIENT_ID`: login app registration that backend Bearer tokens are validated against.
+- `JWT_SECRET_KEY`: signing key for session tokens; set this, there is no production default.
+- `DATABASE_URL`: database connection string; leave blank to fall back to local SQLite.
+- `AZURE_STORAGE_CONNECTION_STRING`: blob storage for uploads and agent memory.
+- `TASK_RADAR_BASE_URL`, `TASK_RADAR_MCP_API_KEY`: register Task Radar with the orchestration brain.
+- `TASK_RADAR_INBOUND_API_KEY`: key Task Radar presents on ingestion callbacks; without it callbacks return 401.
+- `MELA_INGESTION_BASE_URL`: public URL workers post asynchronous results back to.
+- Frontend: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_ENTRA_AUTH_CLIENT_ID`, `NEXT_PUBLIC_AZURE_AD_TENANT_ID`, `NEXT_PUBLIC_REDIRECT_URI`, `NEXT_PUBLIC_API_SCOPE`.
+
+The full variable set with inline notes is in `backend/.env.example`, `frontend/.env.example`, and `task-radar/.env.example`.
+
+## Competition tracks
+
+Mela AI competes in the Enterprise Agents and Reasoning Agents tracks of the Microsoft Agents League. Its IQ integration spans Foundry IQ for model inference and embeddings and Work IQ for Microsoft 365 sources and outputs. It is submitted for the Best use of IQ tools special category.

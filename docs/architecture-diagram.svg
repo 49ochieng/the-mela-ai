@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="960" height="600" fill="#ffffff"/>
+  <text x="480" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#1b1b1f">Mela AI — Two-App Orchestration Architecture</text>
+
+  <!-- Users -->
+  <rect x="40" y="70" width="180" height="70" rx="8" fill="#eef3fb" stroke="#3a6ea5"/>
+  <text x="130" y="100" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1b1f">Users</text>
+  <text x="130" y="120" text-anchor="middle" font-size="11" fill="#444">Web app, embed iframe, MCP clients</text>
+
+  <!-- Mela Brain -->
+  <rect x="300" y="60" width="360" height="200" rx="10" fill="#f4f8f4" stroke="#2e7d32" stroke-width="2"/>
+  <text x="480" y="86" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1b1f">Mela Brain (FastAPI)</text>
+  <rect x="320" y="100" width="150" height="40" rx="6" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="395" y="125" text-anchor="middle" font-size="11" fill="#1b1b1f">Governance + Budgets</text>
+  <rect x="490" y="100" width="150" height="40" rx="6" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="565" y="125" text-anchor="middle" font-size="11" fill="#1b1b1f">Model Router</text>
+  <rect x="320" y="150" width="150" height="40" rx="6" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="395" y="175" text-anchor="middle" font-size="11" fill="#1b1b1f">Work IQ + RAG</text>
+  <rect x="490" y="150" width="150" height="40" rx="6" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="565" y="175" text-anchor="middle" font-size="11" fill="#1b1b1f">Orchestration Brain</text>
+  <rect x="320" y="200" width="320" height="40" rx="6" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="480" y="225" text-anchor="middle" font-size="11" fill="#1b1b1f">18 built-in tools + circuit breaker per worker</text>
+
+  <!-- Foundry IQ -->
+  <rect x="740" y="70" width="180" height="90" rx="8" fill="#fff6e9" stroke="#b26a00"/>
+  <text x="830" y="96" text-anchor="middle" font-size="13" font-weight="700" fill="#1b1b1f">Foundry IQ</text>
+  <text x="830" y="116" text-anchor="middle" font-size="10" fill="#444">Azure AI Foundry</text>
+  <text x="830" y="132" text-anchor="middle" font-size="10" fill="#444">LLM inference + embeddings</text>
+  <text x="830" y="148" text-anchor="middle" font-size="10" fill="#444">silent failover</text>
+
+  <!-- Task Radar -->
+  <rect x="300" y="360" width="360" height="160" rx="10" fill="#f0f4fb" stroke="#3a6ea5" stroke-width="2"/>
+  <text x="480" y="386" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1b1f">Task Radar (separate FastAPI + Next.js)</text>
+  <rect x="320" y="400" width="150" height="40" rx="6" fill="#ffffff" stroke="#3a6ea5"/>
+  <text x="395" y="425" text-anchor="middle" font-size="11" fill="#1b1b1f">Outlook scan</text>
+  <rect x="490" y="400" width="150" height="40" rx="6" fill="#ffffff" stroke="#3a6ea5"/>
+  <text x="565" y="425" text-anchor="middle" font-size="11" fill="#1b1b1f">AI task extraction</text>
+  <rect x="320" y="450" width="150" height="40" rx="6" fill="#ffffff" stroke="#3a6ea5"/>
+  <text x="395" y="475" text-anchor="middle" font-size="11" fill="#1b1b1f">Planner + Excel sync</text>
+  <rect x="490" y="450" width="150" height="40" rx="6" fill="#ffffff" stroke="#3a6ea5"/>
+  <text x="565" y="475" text-anchor="middle" font-size="11" fill="#1b1b1f">10 MCP capabilities</text>
+
+  <!-- Work IQ sources/outputs -->
+  <rect x="740" y="360" width="180" height="160" rx="8" fill="#fff6e9" stroke="#b26a00"/>
+  <text x="830" y="386" text-anchor="middle" font-size="13" font-weight="700" fill="#1b1b1f">Work IQ</text>
+  <text x="830" y="408" text-anchor="middle" font-size="10" fill="#444">Microsoft Graph</text>
+  <text x="830" y="430" text-anchor="middle" font-size="10" fill="#444">Outlook, Teams</text>
+  <text x="830" y="448" text-anchor="middle" font-size="10" fill="#444">Planner, SharePoint</text>
+  <text x="830" y="466" text-anchor="middle" font-size="10" fill="#444">OneDrive</text>
+
+  <!-- Arrows -->
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#555"/>
+    </marker>
+  </defs>
+  <line x1="220" y1="105" x2="298" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="660" y1="120" x2="738" y2="115" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="700" y="108" text-anchor="middle" font-size="9" fill="#666">model calls</text>
+
+  <line x1="480" y1="260" x2="480" y2="358" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="556" y="300" text-anchor="middle" font-size="10" fill="#666">MCP-over-HTTP dispatch</text>
+  <line x1="430" y1="358" x2="430" y2="262" stroke="#999" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arr)"/>
+  <text x="360" y="312" text-anchor="middle" font-size="10" fill="#666">async callback</text>
+
+  <line x1="660" y1="440" x2="738" y2="440" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="660" y1="180" x2="738" y2="420" stroke="#999" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arr)"/>
+  <text x="715" y="300" text-anchor="middle" font-size="9" fill="#666">Graph (Work IQ)</text>
+
+  <line x1="300" y1="180" x2="222" y2="120" stroke="#999" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arr)"/>
+  <text x="250" y="165" text-anchor="middle" font-size="9" fill="#666">SSE worker events</text>
+</svg>
