@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "Strong!Passw0rd"
+    ports: ["1433:1433"]
+    volumes: [mssqldata:/var/opt/mssql]
+
+  api:
+    build: ./apps/api
+    env_file: env/.env.local
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///./taskradar.db
+    ports: ["8000:8000"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: ./apps/api
+    env_file: env/.env.local
+    command: python -m app.workers.worker
+    depends_on: [api]
+
+  scheduler:
+    build: ./apps/api
+    env_file: env/.env.local
+    command: python -m app.scheduler.scheduler
+    depends_on: [api]
+
+  mcp:
+    build: ./apps/api
+    env_file: env/.env.local
+    ports: ["8090:8090"]
+    command: python -m app.mcp.server
+    depends_on: [api]
+
+  web:
+    build: ./apps/web
+    env_file: env/.env.local
+    ports: ["2005:2005"]
+    depends_on: [api]
+
+volumes:
+  mssqldata:
