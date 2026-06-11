@@ -1,0 +1,15 @@
+# Web image hygiene
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+out/
+.turbo/
+.cache/
+*.log
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+README.md
