@@ -1,0 +1,35 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+node_modules/
+.next/
+out/
+dist/
+build/
+# Environment / secrets — NEVER commit real values
+.env
+.env.local
+.env.prod
+env/.env*
+!env/.env*.sample
+*.db
+*.sqlite*
+storage/
+.DS_Store
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+
+# Process logs — may contain bearer tokens, identifiers, encrypted refs
+*.log
+uvicorn*.log
+next*.log
+apps/api/uvicorn*.log
+apps/web/next*.log

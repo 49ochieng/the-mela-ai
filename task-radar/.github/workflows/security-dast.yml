@@ -1,0 +1,88 @@
+name: security-dast
+
+# Dynamic Application Security Testing.
+# Runs OWASP ZAP baseline (passive only — no destructive scans) against
+# the API and web tier brought up via docker compose. SARIF is uploaded
+# so findings appear in the repository's Security tab.
+#
+# Schedule: nightly + manual dispatch. Not on every PR because a full
+# baseline takes ~5 min and depends on Docker.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  zap-baseline:
+    name: zap baseline (${{ matrix.target.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: api, url: "http://localhost:8000/health" }
+          - { name: web, url: "http://localhost:2005" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ephemeral test secrets
+        run: |
+          {
+            echo "APP_ENV=development"
+            echo "DEBUG=false"
+            echo "FRONTEND_URL=http://localhost:2005"
+            echo "BACKEND_URL=http://localhost:8000"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "TOKEN_ENCRYPTION_KEY=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+            echo "MICROSOFT_REDIRECT_URI=http://localhost:8000/api/auth/microsoft/callback"
+            echo "DATABASE_URL=sqlite+aiosqlite:///./taskradar.db"
+            echo "QUEUE_PROVIDER=memory"
+            echo "RATE_LIMIT_ENABLED=false"
+            echo "CSRF_ENABLED=false"
+          } > .env
+
+      - name: Install Python crypto for keygen
+        run: pip install cryptography
+
+      - name: docker compose up
+        run: |
+          docker compose up -d api web
+          # Wait for API to become reachable
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "API up"; break
+            fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:2005 >/dev/null; then
+              echo "Web up"; break
+            fi
+            sleep 2
+          done
+
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ matrix.target.url }}
+          fail_action: false
+          allow_issue_writing: false
+          cmd_options: "-a -j -m 5"
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report_md.sarif
+          category: zap-${{ matrix.target.name }}
+        continue-on-error: true
+
+      - name: docker compose down
+        if: always()
+        run: docker compose down -v
