@@ -116,3 +116,6 @@ backend_logs_now/
 startup_diag_report.txt
 startup_diag_report_localsnapshot.txt
 infra/main.json
+
+# Agent runtime data (user uploads / persisted memory — not source)
+backend/data/agent_memory/
