@@ -24,8 +24,9 @@
 
 .EXAMPLE
   cd "C:\copilot\Mela Task Radar"
-  $env:AZURE_CLIENT_SECRET = "Vby8Q~..."   # Entra app client secret
-  $env:AZURE_OPENAI_API_KEY = "7NPNHc..."  # Azure OpenAI key
+  $env:AZURE_CLIENT_SECRET  = "<entra-app-client-secret>"
+  $env:AZURE_OPENAI_API_KEY = "<azure-openai-key>"
+  $env:SQL_PASSWORD         = "<armelysql-admin-password>"
   .\infra\azure\deploy.ps1
 #>
 
@@ -41,7 +42,8 @@ $NAME_PREFIX     = "melatr"
 $SQL_SERVER   = "armely.database.windows.net"
 $SQL_DATABASE = "MelaBilling"
 $SQL_USERNAME = "armelysql"
-$SQL_PASSWORD = "REDACTED-ROTATED-SQL-PASSWORD"
+# $SQL_PASSWORD is read from the environment in the Secrets section below —
+# never hardcode it here.
 
 $API_NAME    = "$NAME_PREFIX-api"
 $WORKER_NAME = "$NAME_PREFIX-worker"
@@ -61,6 +63,8 @@ $AZURE_CLIENT_SECRET = if ($env:AZURE_CLIENT_SECRET) { $env:AZURE_CLIENT_SECRET 
                        else { Read-Host "Enter AZURE_CLIENT_SECRET (Entra app secret)" -AsSecureString | ConvertFrom-SecureString -AsPlainText }
 $AZURE_OPENAI_API_KEY = if ($env:AZURE_OPENAI_API_KEY) { $env:AZURE_OPENAI_API_KEY }
                         else { Read-Host "Enter AZURE_OPENAI_API_KEY" -AsSecureString | ConvertFrom-SecureString -AsPlainText }
+$SQL_PASSWORD = if ($env:SQL_PASSWORD) { $env:SQL_PASSWORD }
+                else { Read-Host "Enter SQL_PASSWORD (armelysql admin password)" -AsSecureString | ConvertFrom-SecureString -AsPlainText }
 
 function Step($n, $msg) { Write-Host "`n[$n] $msg" -ForegroundColor Cyan }
 function OK($msg)        { Write-Host "    OK: $msg" -ForegroundColor Green }
