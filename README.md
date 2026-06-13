@@ -2,6 +2,12 @@
 
 Mela AI is the control plane that makes enterprise AI deployable at scale. It governs what AI costs, it grounds answers in organizational knowledge, and it runs a background agent that recovers work people committed to but never tracked.
 
+## Watch the demo
+
+[![Watch the Mela AI demo on YouTube](https://img.youtube.com/vi/kbqiWrMlnuk/maxresdefault.jpg)](https://youtu.be/kbqiWrMlnuk)
+
+> ▶️ [Watch the Mela AI demo on YouTube](https://youtu.be/kbqiWrMlnuk)
+
 ## The problem
 
 Organizations deploy AI across hundreds of users with no visibility into spend. Nobody can say who is consuming what, which models answer which requests, or whether an expensive model is doing work a cheap model could do. Token usage is invisible until the invoice arrives. Budgets drift, finance pushes back, and the rollout stalls.
