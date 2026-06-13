@@ -1,12 +1,12 @@
 # Mela AI - Production Runtime Dependencies Only
 # (excludes dev tools: pytest, black, isort, flake8, mypy)
-# cache-bust: 2026-05-12 — add bcrypt for MCP client API key hashing
+# cache-bust: 2026-06-13 — bump vulnerable deps to match requirements.txt floors
 
 # FastAPI & Web
 fastapi==0.109.2
 uvicorn[standard]==0.27.1
-gunicorn==21.2.0
-python-multipart==0.0.9
+gunicorn==23.0.0
+python-multipart==0.0.26
 httpx>=0.28.1
 websockets>=13.0.0,<17.0.0
 
@@ -23,7 +23,7 @@ pyodbc==5.1.0
 redis>=5.0,<6
 
 # Azure Services
-azure-identity==1.15.0
+azure-identity==1.16.1
 azure-storage-blob==12.19.0
 azure-search-documents==11.4.0
 azure-ai-documentintelligence==1.0.0b2
@@ -41,9 +41,9 @@ anthropic>=0.40.0
 google-genai>=1.0.0
 
 # Authentication
-python-jose[cryptography]==3.3.0
-PyJWT==2.8.0
-cryptography==42.0.2
+python-jose[cryptography]==3.4.0
+PyJWT==2.12.0
+cryptography==46.0.6
 msal==1.26.0
 bcrypt>=4.0.0
 
@@ -54,14 +54,14 @@ typing_extensions>=4.8.0
 pydantic>=2.9.0,<3.0.0
 pydantic-settings>=2.1.0,<3.0.0
 email-validator==2.1.0
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # Document Processing
 PyMuPDF==1.23.22
 python-docx==1.1.0
 python-pptx==0.6.23
 openpyxl==3.1.2
-Pillow==10.2.0
+Pillow==10.3.0
 
 # Code Interpreter / Data Science (used by run_python_code tool in subprocess)
 pandas>=2.2.1
