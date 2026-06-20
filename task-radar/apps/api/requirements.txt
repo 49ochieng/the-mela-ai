@@ -2,7 +2,7 @@ fastapi==0.136.1
 uvicorn[standard]==0.46.0
 gunicorn==23.0.0
 pydantic==2.13.4
-pydantic-settings==2.14.0
+pydantic-settings==2.14.2
 SQLAlchemy==2.0.35
 alembic==1.13.3
 aiosqlite==0.20.0
